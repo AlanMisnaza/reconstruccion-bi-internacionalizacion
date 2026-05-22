@@ -11,9 +11,9 @@
 | Arquitecto BI | [tu nombre] |
 | Plataforma | Power BI (formato `.pbip`) |
 | Versionado | Git |
-| Versión del documento | v1.1 |
-| Última actualización | 2026-05-15 |
-| Estado | Fase 0 cerrada · listo para Fase 1 |
+| Versión del documento | v1.2 |
+| Última actualización | 2026-05-22 |
+| Estado | Fase 1 cerrada · listo para Fase 2 |
 
 ---
 
@@ -412,6 +412,30 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Trade-off aceptado:** `CALCULATE` sin `KEEPFILTERS` hace override si el usuario filtra por convenio. Aceptable: tautológico.
 - **Test de portabilidad:** funciona en Resumen, Virtual (F5), Internacionales (F4), SNIES (F2). Sin cambios.
 
+### 7.13 Decisión: tops con dimensión Dirección incorporada (no filtro de visual separado)
+
+- **Decisión:** los 3 tops (países, tipos, instituciones) usan un solo visual con Dirección como dimensión interna (Legend/eje), no dos visuales separados con filtro de visual por Dirección.
+- **Tipo:** desvío justificado de §7.6.
+- **Por qué:** permite ver E/S simultáneamente en un vistazo. Con filtro de visual separado, el usuario necesitaba comparar dos visuales apilados — mayor carga cognitiva para directivos. La paleta consistente (`#2E5597` Entrante, `#BDD7EE` Saliente) preserva la lectura E/S sin necesidad de visuales separados.
+- **Consecuencia:** la "decisión de implementación" Edit Interactions → None (planeada originalmente para evitar conflicto entre slicer y filtro de visual) deja de aplicar. No hay conflicto porque no existe filtro de visual por Dirección — el slicer pasa limpio a través del visual.
+- **Trade-off aceptado:** visual más denso. Mitigado con Top N (§7.14).
+- **Test de portabilidad:** mismo patrón replicable en Fase 5 (Movilidad Virtual).
+
+### 7.14 Decisión: Top 5 con filtro nativo + tooltip pages diferidas
+
+- **Decisión:** los 3 tops muestran Top 5 por [Movilidades] con filtro Top N nativo de Power BI, descendente. Tooltip pages con ranking completo diferidas a post-reunión stakeholder.
+- **Tipo:** UX / densidad informativa.
+- **Por qué:** Top 5 es suficiente para lectura ejecutiva. La profundidad adicional (tooltip pages con ranking extendido) se valida con stakeholder antes de construir para no sobreconstruir. Sin categoría "Otros" agrupada — diluye lectura ejecutiva.
+- **Trade-off aceptado:** acceso al ranking completo no disponible desde esta página hasta validación con stakeholder.
+- **Test de portabilidad:** patrón replicable en Fase 5.
+
+### 7.15 Decisión: slicers de exploración en panel lateral (no en lienzo horizontal)
+
+- **Decisión:** todos los slicers (incluyendo Año, Semestre, Dirección) van en panel lateral estándar heredado de plantilla §11.6. El wireframe de §8.2 los mostraba en lienzo horizontal — ese sketch era conceptual, no normativo.
+- **Tipo:** estándar operativo.
+- **Por qué:** consistente con §11.5.1. El panel lateral estandarizado es la convención institucional y mantiene sincronización entre páginas analíticas.
+- **Trade-off aceptado:** ninguno relevante.
+
 ---
 
 ## 8. Arquitectura de páginas
@@ -449,22 +473,53 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Alcance (panel oculto):** `Modalidad = "Presencial"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
 - **Cuadro de texto visible:** "Esta página analiza movilidad presencial de estudiantes temporales (entrantes y salientes). Excluye estudiantes regulares matriculados y modalidad virtual."
 
-**Estructura visual propuesta:**
+**Estructura visual implementada (Fase 1 — cerrada 2026-05-22):**
+
+Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers y barra inferior):
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ [Filtros laterales] │ KPI Movs │ KPI Pers │ % Conv │     │
-│                     ├──────────┴──────────┴────────┘     │
-│                     │ Slicer: Año · Semestre · Dirección │
-│                     ├──────────────────────┬────────────┤
-│                     │ Evolución temporal   │ Top País   │
-│                     │ (2 series E/S)       │ Origen     │
-│                     │                      │ Destino    │
-│                     ├──────────────────────┼────────────┤
-│                     │ Top tipo mov E       │ Top inst   │
-│                     │ Top tipo mov S       │ Origen/Dst │
-└─────────────────────┴──────────────────────┴────────────┘
+│  [Movilidades]       [Personas]       [% Convenio]       │ 65px
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│            Evolución temporal (líneas E/S)                │ 240px
+│                                                          │
+├──────────────────┬──────────────────┬────────────────────┤
+│  Top Países      │  Top Tipos Mov   │  Top Instituciones │ 280px
+│  (E + S juntos)  │  (E + S juntos)  │  (E + S juntos)    │
+└──────────────────┴──────────────────┴────────────────────┘
 ```
+
+**Fila 1 — KPIs (65px):**
+- 3 tarjetas individuales (new Card visual).
+- Movilidades y Personas a ~400px, % Convenio a ~250px.
+- Font: 36pt bold primarias, 28pt bold secundaria.
+- Color valor: `#1F3864` primarias, `#595959` % Convenio.
+
+**Fila 2 — Evolución temporal (240px):**
+- Line Chart ancho completo.
+- Eje X: período académico categórico (`YYYY-N`), 9pt rotación 45°.
+- Eje Y: [Movilidades].
+- Legend: `STR_CLASIFICACION_MOVILIDAD_CAL_AJT`.
+- Series: Entrante `#2E5597`, Saliente `#BDD7EE`.
+- Tooltip: [Personas]. Etiquetas de datos: Off.
+- Gridlines horizontales activas en `#F2F2F2`.
+
+**Fila 3 — Tops (280px):**
+- 3 Clustered Bar Charts horizontales (no 6 visuales — ver §7.13).
+- Dimensión Dirección incorporada como serie interna del visual.
+- Top 5 por [Movilidades], descendente, filtro Top N nativo (ver §7.14).
+- Títulos explícitos: "Top Países", "Top Tipos de Movilidad", "Top Instituciones".
+- Etiquetas al final de barra, 10pt.
+- Eje X desactivado. Gridlines desactivadas.
+- Sin categoría "Otros" agrupada.
+
+**Elementos transversales:**
+- Paleta E/S consistente: `#2E5597` Entrante, `#BDD7EE` Saliente.
+- Subtítulo dinámico heredado de plantilla.
+- Cuadro de texto de alcance visible bajo subtítulo.
+- Barra inferior: "Nota: No se incluyen interacciones virtuales" + fecha de corte.
+- Slicers Año, Semestre, Dirección, Nivel, Unidad, Programa, País en panel lateral (ver §7.15).
 
 ### 8.3 Movilidad Virtual *(nueva)*
 
@@ -562,8 +617,9 @@ AÑO · SEMESTRE · ID_TIPO_DOCUMENTO · NUM_DOCUMENTO
 
 ### 10.3 Decisiones diferidas
 
-- **Drill-through entre páginas:** se decide en Fase 1, una vez establecida la página Balance.
+- **Drill-through entre páginas:** se decide en Fase 1, una vez establecida la página Balance. **Diferido a Fase 3** — drill-through hacia Detalle Movilidad se construye cuando Detalle esté rediseñado, para evitar dependencia frágil sobre página que va a cambiar.
 - **Sincronización de slicers entre páginas:** se decide en Fase 0, junto con la convención de slicers.
+- **Tooltip pages ranking completo (tops Fase 1):** diferido a post-reunión stakeholder. Validar si Top 5 satisface requerimiento o si se necesita profundidad adicional. Si se requiere → construir 3 tooltip pages ocultas (países, tipos, instituciones) antes de cierre de Fase 5.
 
 ---
 
@@ -852,6 +908,22 @@ Entregables completados:
 **Dependencias:** Fase 0.
 
 **Pendientes que se resuelven aquí:** ninguno, depende de P3 ya resuelto.
+
+**✅ Fase 1 cerrada — 2026-05-22.**
+
+Entregables completados:
+- Página "Balance de Movilidad Presencial" implementada según §8.2 (estructura final).
+- Filtros de alcance en panel oculto: `Modalidad = "Presencial"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
+- 3 KPIs (Movilidades, Personas, % Bajo Convenio) sin medidas nuevas — reutilización completa de medidas portables de Fase 0.
+- Evolución temporal con 2 series E/S, etiquetas off, tooltip con [Personas], eje X categórico rotado 45°.
+- 3 tops con dimensión Dirección incorporada como serie interna del visual (desvío justificado de §7.6, ver §7.13).
+- Top 5 con filtro nativo de Power BI, sin categoría "Otros" (ver §7.14).
+- Slicers en panel lateral estándar, no en lienzo horizontal (ver §7.15).
+- Cuadro de texto de alcance visible bajo subtítulo dinámico.
+- Cero medidas nuevas — medidas base de Fase 0 cubren toda la página.
+- Drill-through diferido a Fase 3.
+- Tooltip pages con ranking completo diferidas a validación post-stakeholder (§10.3).
+- Las 5 preguntas DRI #1–#5 son respondibles desde la página.
 
 ---
 
