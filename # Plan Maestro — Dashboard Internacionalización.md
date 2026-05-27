@@ -11,9 +11,9 @@
 | Arquitecto BI | [tu nombre] |
 | Plataforma | Power BI (formato `.pbip`) |
 | Versionado | Git |
-| Versión del documento | v1.2 |
-| Última actualización | 2026-05-22 |
-| Estado | Fase 1 cerrada · listo para Fase 2 |
+| Versión del documento | v1.3 |
+| Última actualización | 2026-05-27 |
+| Estado | Fase 2 cerrada · listo para Fase 5 |
 
 ---
 
@@ -320,6 +320,8 @@ Ningún componente se declara terminado sin entregar:
   - 3 páginas con tabs/bookmarks → mezcla niveles analíticos, viola principio 5.4.
   - 8+ páginas con cortes adicionales → fragmenta la lectura ejecutiva.
 
+> **Nota Fase 2 (2026-05-27):** el conteo real sube a 7 páginas. Export SNIES se divide en dos páginas independientes (Saliente + Entrante) en lugar de una con bookmarks. Ver §7.8 revisado.
+
 ### 7.2 Decisión: Movilidad Virtual como página propia, no bookmark
 
 - **Tipo:** estructura.
@@ -375,11 +377,18 @@ En la página Balance, la dirección se trata distinto según el visual:
   - Ocupa 1/6 del lienzo para una métrica binaria no prioritaria.
 - **Solución:** tarjeta KPI pequeña ("57% bajo convenio") junto al resto de KPIs.
 
-### 7.8 Decisión: Export SNIES con dos sub-vistas (no dos páginas)
+### 7.8 Decisión: Export SNIES con dos páginas independientes + navegación cruzada
 
-- **Implementación:** una sola página con bookmarks que alternan entre layout Entrante y Saliente. Las columnas mostradas son distintas porque SNIES exige columnas distintas.
-- **Por qué una página y no dos:** el flujo del analista SNIES es secuencial (genera entrante, genera saliente). Una página con toggle mantiene el contexto.
-- **Trade-off:** los bookmarks aumentan complejidad de mantenimiento. Aceptable porque las columnas SNIES son fijas por norma (no cambian con frecuencia).
+> **Revisado en Fase 2 (2026-05-27).** Reemplaza decisión original de una página con bookmarks.
+
+- **Implementación:** dos páginas independientes ("Export SNIES Saliente", "Export SNIES Entrante") con tabla plana cada una. Botones de alternancia tipo tab (Page Navigation) en la parte superior para navegar entre ellas sin pasar por Home. Entrada única "Export SNIES" desde Home que aterriza en Saliente.
+- **Filtros de alcance (panel oculto):** `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`, `STR_CLASIFICACION_MOVILIDAD_CAL_AJT` fijado a la dirección de la página, Año y Semestre fijados al período a reportar.
+- **Slicers visibles (dropdown en línea horizontal, arriba de la tabla):** Unidad Académica, Programa Académico, Tipo de Actividad, ID Estudiante. Panel lateral reducido respecto a páginas analíticas — solo filtros útiles para validación operativa.
+- **Título dinámico:** medida `_Título Período SNIES` muestra el período configurado en panel oculto para que el coordinador sepa qué período valida sin interactuar con filtros.
+- **Sincronización de slicers:** activa entre las dos páginas SNIES. Desactivada con páginas analíticas.
+- **Por qué dos páginas y no bookmarks:** el caso de uso incluye validación por coordinadores, no solo extracción por analista SNIES. Dos páginas fijas eliminan el riesgo de desincronización de bookmarks para un escenario donde la claridad es crítica. Cada coordinador valida típicamente una sola dirección.
+- **Trade-off aceptado:** una página adicional en el archivo. Duplicación mínima — son tablas planas.
+- **Desvío de §7.8 original:** justificado. El supuesto original era flujo secuencial de un analista; la realidad incluye coordinadores validando una sola dirección.
 
 ### 7.9 Decisión: medidas base mínimas, no medidas por dirección/modalidad/tipo
 
@@ -436,6 +445,29 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Por qué:** consistente con §11.5.1. El panel lateral estandarizado es la convención institucional y mantiene sincronización entre páginas analíticas.
 - **Trade-off aceptado:** ninguno relevante.
 
+### 7.16 Decisión: Export SNIES — slicers en lienzo horizontal (excepción a §7.15)
+
+- **Decisión:** las páginas Export SNIES usan slicers dropdown en línea horizontal arriba de la tabla, no en panel lateral.
+- **Tipo:** excepción justificada al estándar §7.15.
+- **Por qué:** son páginas de tabla plana donde el espacio horizontal es crítico para las 16–20 columnas. Un panel lateral reduciría el ancho disponible para la tabla y forzaría scroll horizontal excesivo. Además, el set de slicers es reducido (4 vs 7 de páginas analíticas) y orientado a validación operativa, no a exploración analítica.
+- **Trade-off aceptado:** inconsistencia visual con páginas analíticas. Aceptable porque las páginas SNIES son bloque OPERACIÓN con audiencia y propósito distintos.
+
+### 7.17 Decisión: Año y Semestre fijados en panel oculto para páginas SNIES
+
+- **Decisión:** en páginas Export SNIES, Año y Semestre se configuran como filtro de alcance en panel oculto (no como slicer visible). El título dinámico (`_Título Período SNIES`) muestra el período configurado.
+- **Tipo de filtro:** alcance.
+- **Capa elegida:** panel de página.
+- **Por qué:** el coordinador valida un período específico definido por el administrador del reporte. Exponer Año/Semestre como slicers agrega ruido — el coordinador podría cambiar el período accidentalmente y validar datos incorrectos.
+- **Trade-off aceptado:** el administrador del reporte debe actualizar manualmente el filtro de panel oculto cada período. Aceptable dado que el refresh es ~2x/semestre.
+- **Test de portabilidad:** patrón reutilizable si se necesitan otras páginas con período fijo.
+
+### 7.18 Decisión: país con nombre y código ISO en tabla Export SNIES
+
+- **Decisión:** las tablas Export SNIES muestran tanto el nombre del país como el código ISO (`STR_COD_PAIS_AJT`) para País Extranjero y País Financiador.
+- **Tipo:** UX operativa.
+- **Por qué:** el coordinador valida visualmente por nombre (más legible), pero el flujo SNIES downstream necesita el código ISO. Incluir ambos evita que el coordinador tenga que hacer lookup mental código↔nombre.
+- **Trade-off aceptado:** una columna adicional por cada campo de país. Ancho de tabla aumenta marginalmente.
+
 ---
 
 ## 8. Arquitectura de páginas
@@ -456,9 +488,12 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 │                                                          │
 │  OPERACIÓN                                               │
 │  ├─ 5. Detalle Movilidad                                │
-│  └─ 6. Export SNIES                                     │
+│  ├─ 6. Export SNIES Saliente                            │
+│  └─ 7. Export SNIES Entrante                            │
 └─────────────────────────────────────────────────────────┘
 ```
+
+> **Nota:** desde Home, Export SNIES se muestra como entrada única que aterriza en Saliente. La navegación interna Saliente↔Entrante se hace con botones tipo tab dentro de las páginas SNIES.
 
 ### 8.1 Cobertura Internacional *(existente, sin cambios)*
 
@@ -547,37 +582,90 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 - **Estado actual:** página de imagen 3, dos visuales (consulta + descargue).
 - **Ajuste a realizar:** unificar en una tabla, con selector Entrante/Saliente que cambia el set de columnas visibles (entrante y saliente tienen columnas distintas según naturaleza del registro).
 
-### 8.6 Export SNIES *(nueva)*
+### 8.6 Export SNIES Saliente *(nueva — Fase 2)*
 
-- **Audiencia:** analistas SNIES.
-- **Propósito:** tabla plana exportable con layout SNIES.
-- **Filtros visibles:** Año + Semestre + Dirección.
-- **Layouts (por bookmarks):**
+- **Audiencia:** coordinadores (validación) + analistas SNIES (extracción).
+- **Propósito:** tabla plana con datos esenciales para flujo de homologación SNIES. No es el reporte SNIES final — es el insumo desde Power BI.
+- **Alcance (panel oculto):** `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}` AND `STR_CLASIFICACION_MOVILIDAD_CAL_AJT = "Saliente"` AND Año/Semestre fijados al período a reportar.
+- **Título dinámico:** medida `_Título Período SNIES` muestra período configurado.
+- **Cuadro de texto visible:** "Datos de movilidad estudiantil saliente para reporte SNIES. Período fijado por el administrador del reporte. Los datos mostrados son insumo para el flujo de homologación SNIES — no constituyen el reporte final."
 
-**SNIES Saliente:**
-```
-AÑO · SEMESTRE · ID_TIPO_DOCUMENTO · NUM_DOCUMENTO
-· ID_PAIS_EXTRANJERO · INSTITUCION_EXTRANJERA
-· ID_TIPO_MOV_EST_EXTERIOR · NUM_DIAS_MOVILIDAD
-· MOVILIDAD_POR_CONVENIO · CODIGO_CONVENIO
-· ID_FUENTE_NACIONAL_INVESTIG · VALOR_FINANCIACION_NACIONAL
-· ID_FUENTE_INTERNACIONAL · ID_PAIS_FINANCIADOR
-· VALOR_FINANCIACION_INTERNAC
-```
+**Navegación:** botones tipo tab (Page Navigation). Saliente activo (`#2E5597`, texto blanco), Entrante inactivo (`#F2F2F2`, texto `#595959`).
 
-**SNIES Entrante:**
-```
-AÑO · SEMESTRE · ID_TIPO_DOCUMENTO · NUM_DOCUMENTO
-· PRIMER_NOMBRE · SEGUNDO_NOMBRE · PRIMER_APELLIDO · SEGUNDO_APELLIDO
-· ID_PAIS_EXTRANJERO · INSTITUCION_EXTRANJERA
-· ID_TIPO_MOV_EST_EXTRANJ · NUM_DIAS_MOVILIDAD
-· MOVILIDAD_POR_CONVENIO · CODIGO_CONVENIO
-· ID_FUENTE_NACIONAL_INVESTIG · VALOR_FINANCIACION_NACIONAL
-· ID_FUENTE_INTERNACIONAL · ID_PAIS_FINANCIADOR
-· VALOR_FINANCIACION_INTERNAC
-```
+**Slicers visibles (dropdown en línea horizontal):**
 
-**Mapeo modelo → SNIES:** se documenta en Fase 2 como anexo aparte (requiere tabla de homologación de `ID_TIPO_MOV_EST_*` confirmada disponible).
+| Slicer | Campo | Origen |
+|---|---|---|
+| Unidad Académica | campo unidad | `DIM_PROGRAMA_ACADEMICO` |
+| Programa Académico | campo programa | `DIM_PROGRAMA_ACADEMICO` |
+| Tipo de Actividad | `STR_DETALLE_ACTIVIDAD_CAL_AJT` | FCT |
+| ID Estudiante | `STR_PERSONA_ID_NK` | FCT |
+
+**Columnas de tabla (orden SNIES):**
+
+| # | Columna visible | Campo modelo | Origen |
+|---|---|---|---|
+| 1 | ID Estudiante | `STR_PERSONA_ID_NK` | FCT |
+| 2 | Tipo Documento | `STR_COD_TIPO_ID_CAL_AJT` | FCT |
+| 3 | Número Documento | `STR_NUM_ID_AJT` | `DIM_PERSONA` |
+| 4 | País Extranjero (nombre) | campo nombre país | `DIM_UBICACION_GEOGRAFICA` |
+| 5 | País Extranjero (código) | `STR_COD_PAIS_AJT` | `DIM_UBICACION_GEOGRAFICA` |
+| 6 | Institución Extranjera | `STR_NOMBRE_ENTIDAD_EXTERNA_CAL_AJT` | FCT |
+| 7 | Tipo Movilidad | `STR_DETALLE_ACTIVIDAD_CAL_AJT` | FCT |
+| 8 | Días Movilidad | `NUM_DURACION_DIAS_CAL_AJT` | FCT |
+| 9 | Movilidad por Convenio | `STR_DATOS_CONVENIO_CAL_AJT` | FCT |
+| 10 | Código Convenio | `NUM_CODIGO_CONVENIO_NK` | `DIM_CONVENIO` |
+| 11 | Fuente Nacional | `STR_DESC_FUENTE_NACIONAL_INVESTIG_CAL_AJT` | FCT |
+| 12 | Valor Financiación Nacional | `NUM_VALOR_FINAN_NACIONAL_CAL_AJT` | FCT |
+| 13 | Moneda Nacional | `STR_MONEDA_FINAN_NACIONAL_CAL_AJT` | FCT |
+| 14 | Fuente Internacional | `STR_DESC_FUENTE_INTERNACIONAL_CAL_AJT` | FCT |
+| 15 | País Financiador (nombre) | campo nombre país | `DIM_UBICACION_GEOGRAFICA_FINANCIADOR` |
+| 16 | País Financiador (código) | `STR_COD_PAIS_AJT` | `DIM_UBICACION_GEOGRAFICA_FINANCIADOR` |
+| 17 | Valor Financiación Internacional | `NUM_VALOR_FINAN_INTERNACIONAL_CAL_AJT` | FCT |
+| 18 | Moneda Internacional | `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT` | FCT |
+
+**Configuración tabla visual:**
+- Tipo: Table (no Matrix). Sin totales, sin subtotales.
+- Tamaño fuente: 10pt cuerpo, 11pt encabezados.
+- Alternating rows: `#F2F2F2` / blanco.
+- Grid lines verticales activas.
+- Formato numérico: sin formato especial — datos crudos.
+- Exportación: nativa de Power BI (clic derecho → Export data).
+
+### 8.7 Export SNIES Entrante *(nueva — Fase 2)*
+
+- **Audiencia, propósito, alcance:** idénticos a §8.6 excepto `STR_CLASIFICACION_MOVILIDAD_CAL_AJT = "Entrante"`.
+- **Navegación:** botones invertidos — Entrante activo, Saliente inactivo.
+- **Cuadro de texto visible:** "Datos de movilidad estudiantil entrante para reporte SNIES. Período fijado por el administrador del reporte. Los datos mostrados son insumo para el flujo de homologación SNIES — no constituyen el reporte final."
+
+**Columnas de tabla (orden SNIES — agrega nombres entre Número Documento y País):**
+
+| # | Columna visible | Campo modelo | Origen |
+|---|---|---|---|
+| 1 | ID Estudiante | `STR_PERSONA_ID_NK` | FCT |
+| 2 | Tipo Documento | `STR_COD_TIPO_ID_CAL_AJT` | FCT |
+| 3 | Número Documento | `STR_NUM_ID_AJT` | `DIM_PERSONA` |
+| 4 | Primer Nombre | `STR_PRIMER_NOMBRE_AJT` | `DIM_PERSONA` |
+| 5 | Segundo Nombre | `STR_SEGUNDO_NOMBRE_AJT` | `DIM_PERSONA` |
+| 6 | Primer Apellido | `STR_PRIMER_APELLIDO_AJT` | `DIM_PERSONA` |
+| 7 | Segundo Apellido | `STR_SEGUNDO_APELLIDO_AJT` | `DIM_PERSONA` |
+| 8 | País Extranjero (nombre) | campo nombre país | `DIM_UBICACION_GEOGRAFICA` |
+| 9 | País Extranjero (código) | `STR_COD_PAIS_AJT` | `DIM_UBICACION_GEOGRAFICA` |
+| 10 | Institución Extranjera | `STR_NOMBRE_ENTIDAD_EXTERNA_CAL_AJT` | FCT |
+| 11 | Tipo Movilidad | `STR_DETALLE_ACTIVIDAD_CAL_AJT` | FCT |
+| 12 | Días Movilidad | `NUM_DURACION_DIAS_CAL_AJT` | FCT |
+| 13 | Movilidad por Convenio | `STR_DATOS_CONVENIO_CAL_AJT` | FCT |
+| 14 | Código Convenio | `NUM_CODIGO_CONVENIO_NK` | `DIM_CONVENIO` |
+| 15 | Fuente Nacional | `STR_DESC_FUENTE_NACIONAL_INVESTIG_CAL_AJT` | FCT |
+| 16 | Valor Financiación Nacional | `NUM_VALOR_FINAN_NACIONAL_CAL_AJT` | FCT |
+| 17 | Moneda Nacional | `STR_MONEDA_FINAN_NACIONAL_CAL_AJT` | FCT |
+| 18 | Fuente Internacional | `STR_DESC_FUENTE_INTERNACIONAL_CAL_AJT` | FCT |
+| 19 | País Financiador (nombre) | campo nombre país | `DIM_UBICACION_GEOGRAFICA_FINANCIADOR` |
+| 20 | País Financiador (código) | `STR_COD_PAIS_AJT` | `DIM_UBICACION_GEOGRAFICA_FINANCIADOR` |
+| 21 | Valor Financiación Internacional | `NUM_VALOR_FINAN_INTERNACIONAL_CAL_AJT` | FCT |
+| 22 | Moneda Internacional | `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT` | FCT |
+
+Misma configuración de tabla visual que §8.6.
 
 ---
 
@@ -603,7 +691,7 @@ AÑO · SEMESTRE · ID_TIPO_DOCUMENTO · NUM_DOCUMENTO
 | # | Pendiente | Bloquea fase | Responsable |
 |---|---|---|---|
 | P1 | Validar semántica del campo país en `FCT_Movilidad_Estudiantil` para registros de origen `FCT_MATRICULADOS`. ¿Representa nacionalidad del matriculado o algo distinto? Determina si filtrar por país ≠ Colombia es válido para identificar internacionales regulares. | Fase 4 | Equipo modelado |
-| P2 | Tabla de homologación `ID_TIPO_MOV_EST_EXTERIOR` / `ID_TIPO_MOV_EST_EXTRANJ` (código SNIES ↔ descripción interna). Confirmada existencia, falta integrar al modelo si no lo está. | Fase 2 | Equipo modelado |
+| ~~P2~~ | ✅ **Cerrado en Fase 2 (2026-05-27).** Redefinido: la página Export SNIES expone campos esenciales crudos (`STR_DETALLE_ACTIVIDAD_CAL_AJT`, `STR_COD_PAIS_AJT`, etc.) como insumo para un flujo de homologación externo. No se requiere tabla de homologación dentro del modelo Power BI. El mapeo modelo→SNIES queda documentado en §8.6 y §8.7. | — | — |
 | ~~P3~~ | ✅ **Cerrado en Fase 0 (2026-05-15).** Resuelto trivialmente: `STR_DATOS_CONVENIO_CAL_AJT` ya es binario "Si"/"No" en el origen. No requiere columna calculada ni binarización. | — | — |
 
 ### 10.2 Riesgos abiertos
@@ -620,6 +708,7 @@ AÑO · SEMESTRE · ID_TIPO_DOCUMENTO · NUM_DOCUMENTO
 - **Drill-through entre páginas:** se decide en Fase 1, una vez establecida la página Balance. **Diferido a Fase 3** — drill-through hacia Detalle Movilidad se construye cuando Detalle esté rediseñado, para evitar dependencia frágil sobre página que va a cambiar.
 - **Sincronización de slicers entre páginas:** se decide en Fase 0, junto con la convención de slicers.
 - **Tooltip pages ranking completo (tops Fase 1):** diferido a post-reunión stakeholder. Validar si Top 5 satisface requerimiento o si se necesita profundidad adicional. Si se requiere → construir 3 tooltip pages ocultas (países, tipos, instituciones) antes de cierre de Fase 5.
+- **Menú Home — entrada Export SNIES:** pendiente. Se conecta cuando se desarrolle la página Home. Debe apuntar a Export SNIES Saliente como aterrizaje por defecto.
 
 ---
 
@@ -641,7 +730,7 @@ Medidas intermedias que otras consumen y no deben aparecer al usuario final:
 
 - **Prefijo `_`** + propiedad `IsHidden = true`.
 - Aparecen ordenadas al inicio del panel del desarrollador.
-- ✅ `_Movilidades Base`, `_Filtro Año Anterior`
+- ✅ `_Movilidades Base`, `_Filtro Año Anterior`, `_Título Período SNIES`
 
 #### 11.1.3 Tabla de medidas
 
@@ -653,6 +742,7 @@ Medidas intermedias que otras consumen y no deben aparecer al usuario final:
   - `Convenio/`
   - `Financiación/`
   - `Auxiliares/`
+  - `Notas/`
 
 #### 11.1.4 Variables DAX dentro de medidas
 
@@ -712,10 +802,10 @@ Códigos hex propuestos basados en las páginas existentes. Sujetos a confirmaci
 | Rol | Hex | Uso |
 |---|---|---|
 | Azul institucional oscuro | `#1F3864` | Header, KPIs principales, tipografía destacada |
-| Azul medio | `#2E5597` | Serie primaria en visuales, fondos de tarjetas |
+| Azul medio | `#2E5597` | Serie primaria en visuales, fondos de tarjetas, botón activo SNIES |
 | Azul claro | `#BDD7EE` | Serie secundaria, acentos |
-| Gris claro fondo | `#F2F2F2` | Fondo de paneles, separadores suaves |
-| Gris texto secundario | `#595959` | Etiquetas, ejes, anotaciones |
+| Gris claro fondo | `#F2F2F2` | Fondo de paneles, separadores suaves, botón inactivo SNIES |
+| Gris texto secundario | `#595959` | Etiquetas, ejes, anotaciones, texto botón inactivo SNIES |
 | Texto principal | `#262626` | Cuerpo de texto, datos en tablas |
 | Rojo alerta | `#C00000` | Botón "Borrar filtros", indicadores negativos |
 | Verde positivo | `#548235` | Indicadores favorables (uso restringido) |
@@ -777,9 +867,10 @@ Heredados del diseño existente (no se rediseñan):
 - **Fechas calendario** (cuando aparezcan): `DD/MM/YYYY` para consumo humano, `YYYY-MM-DD` para exportaciones SNIES.
 
 ### 11.5 Política de slicers
-### 11.5.1 Tabla de slicers estándar (confirmada Fase 0)
 
-Esta tabla es la referencia normativa. Las páginas analíticas nuevas copian el panel completo de Resumen Movilidad Presencial Internacional.
+#### 11.5.1 Tabla de slicers estándar — páginas analíticas (confirmada Fase 0)
+
+Esta tabla es la referencia normativa para páginas del bloque ANÁLISIS. Las páginas analíticas nuevas copian el panel completo de Resumen Movilidad Presencial Internacional.
 
 | Slicer | Tipo de visual | Orden | Pre-selección |
 |---|---|---|---|
@@ -795,9 +886,30 @@ Esta tabla es la referencia normativa. Las páginas analíticas nuevas copian el
 
 **Sincronización:** activa entre páginas analíticas (Balance Presencial, Virtual, Internacionales). Desactivada con Detalle y SNIES (§11.5.3).
 
+#### 11.5.2 Tabla de slicers — páginas Export SNIES (confirmada Fase 2)
+
+Panel reducido, slicers dropdown en línea horizontal arriba de la tabla (no en panel lateral). Orientados a validación operativa.
+
+| Slicer | Campo | Origen | Pre-selección |
+|---|---|---|---|
+| Unidad Académica | campo unidad | `DIM_PROGRAMA_ACADEMICO` | Sin pre-selección |
+| Programa Académico | campo programa | `DIM_PROGRAMA_ACADEMICO` | Sin pre-selección |
+| Tipo de Actividad | `STR_DETALLE_ACTIVIDAD_CAL_AJT` | FCT | Sin pre-selección |
+| ID Estudiante | `STR_PERSONA_ID_NK` | FCT | Sin pre-selección |
+
+**Sincronización:** activa entre las dos páginas SNIES. Desactivada con páginas analíticas y Detalle.
+
+#### 11.5.3 Grupos de sincronización
+
+| Grupo | Páginas | Sincronizado |
+|---|---|---|
+| Analíticas | Balance Presencial, Virtual, Internacionales | ✅ Entre sí |
+| SNIES | Export SNIES Saliente, Export SNIES Entrante | ✅ Entre sí |
+| Detalle | Detalle Movilidad | ❌ Independiente |
+
 ### 11.6 Plantilla de página
 
-**Convención:** no se mantiene un activo "plantilla" separado. Cada página nueva se construye copiando Resumen Movilidad Presencial Internacional y vaciando los visuales, preservando: logo, panel de slicers, botón borrar filtros, botón home, barra inferior de fuente, subtítulo dinámico, cuadro de texto de alcance (vacío para llenar).
+**Convención:** no se mantiene un activo "plantilla" separado. Cada página nueva se construye copiando Resumen Movilidad Presencial Internacional y vaciando los visuales, preservando: logo, panel de slicers (o reemplazándolo por slicers horizontales en caso SNIES), botón borrar filtros, botón home, barra inferior de fuente, subtítulo dinámico, cuadro de texto de alcance (vacío para llenar).
 
 ### 11.7 Performance baseline (Fase 0)
 
@@ -883,32 +995,6 @@ Entregables completados:
 
 **Objetivo:** página de mayor valor inmediato. Responde 5 de 6 preguntas DRI.
 
-**Entregables:**
-
-1. Página "Balance de Movilidad Presencial" implementada según §8.2.
-2. Filtros de alcance configurados en panel oculto:
-   - `Modalidad = "Presencial"`
-   - `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`
-3. Slicers de exploración (Año, Semestre, Dirección, Nivel, Unidad, Programa, País).
-4. Cuadro de texto visible con el alcance.
-5. Visuales:
-   - 3 KPIs (Movilidades, Personas, % Convenio).
-   - Evolución temporal con 2 series (Entrante + Saliente).
-   - Top país origen + Top país destino (lado a lado).
-   - Top tipo movilidad entrante + saliente (lado a lado).
-   - Top instituciones origen + destino (lado a lado).
-6. Inventario completo de filtros en este `.md`.
-
-**Definition of Done específico:**
-
-- Las 5 preguntas DRI #1 a #5 son respondibles desde esta página, solo presencial.
-- Filtro de alcance NO modifica las medidas base.
-- Slicer Dirección con ambos valores seleccionados por defecto.
-
-**Dependencias:** Fase 0.
-
-**Pendientes que se resuelven aquí:** ninguno, depende de P3 ya resuelto.
-
 **✅ Fase 1 cerrada — 2026-05-22.**
 
 Entregables completados:
@@ -925,30 +1011,32 @@ Entregables completados:
 - Tooltip pages con ranking completo diferidas a validación post-stakeholder (§10.3).
 - Las 5 preguntas DRI #1–#5 son respondibles desde la página.
 
+**Dependencias:** Fase 0.
+
 ---
 
 ### **Fase 2 — Export SNIES** | branch: `phase-2-export-snies`
 
-**Objetivo:** resolver dolor operativo recurrente (reconstrucción manual de reporte SNIES).
+**Objetivo:** resolver dolor operativo recurrente (reconstrucción manual de reporte SNIES). Proveer datos esenciales crudos para flujo de homologación externo.
 
-**Entregables:**
+**✅ Fase 2 cerrada — 2026-05-27.**
 
-1. Página "Export SNIES" con dos bookmarks (Entrante / Saliente).
-2. Mapeo columna modelo → columna SNIES documentado como anexo.
-3. Filtros visibles: Año, Semestre, Dirección.
-4. Tabla plana sin estética analítica (formato exportación).
-5. Botón "Exportar a Excel/CSV" o instrucciones de exportación nativa.
-6. Cuadro de texto con instrucciones de uso para el analista SNIES.
-
-**Definition of Done específico:**
-
-- Layout entrante y saliente coinciden 1:1 con norma SNIES.
-- Tabla de homologación de tipos de movilidad integrada (P2).
-- Exportación produce archivo directamente cargable a SNIES (o lo más cercano posible).
+Entregables completados:
+- Dos páginas independientes: "Export SNIES Saliente" (18 columnas) y "Export SNIES Entrante" (22 columnas). Desvío justificado de §7.8 original (ver §7.8 revisado).
+- Botones de alternancia tipo tab (Page Navigation) entre las dos páginas.
+- Filtros de alcance en panel oculto: tabla origen (Movilidad + Visitantes), dirección fija por página, año y semestre fijados al período a reportar (ver §7.17).
+- Título dinámico con medida `_Título Período SNIES` (ver §7.17).
+- 4 slicers dropdown en línea horizontal: Unidad Académica, Programa Académico, Tipo de Actividad, ID Estudiante (ver §7.16, §11.5.2).
+- Sincronización de slicers entre ambas páginas SNIES, desactivada con analíticas.
+- País mostrado con nombre y código ISO en ambas tablas (ver §7.18).
+- Columnas en orden SNIES. Mapeo modelo→SNIES documentado en §8.6 y §8.7.
+- Cuadro de texto de alcance visible en ambas páginas.
+- P2 cerrado con nueva definición (flujo externo de homologación).
+- 1 medida nueva: `_Título Período SNIES` en `_Medidas/Auxiliares/`, documentada según §5.2.
+- Exportación nativa funcional (clic derecho → Export data).
+- Pendiente: entrada "Export SNIES" en menú Home (se conecta cuando Home se desarrolle, ver §10.3).
 
 **Dependencias:** Fase 0, P2 resuelto.
-
-**Pendientes que se resuelven aquí:** P2.
 
 ---
 
@@ -1038,8 +1126,8 @@ Entregables completados:
 ### Orden recomendado de ejecución
 
 ```
-Fase 0 ──> Fase 1 ──┬──> Fase 5
-                    ├──> Fase 2
+Fase 0 ──> Fase 1 ──┬──> Fase 2 (cerrada)
+                    ├──> Fase 5
                     └──> Fase 3
 
 Fase 0 ──> Fase 4 (cuando P1 esté resuelto)
@@ -1048,6 +1136,8 @@ Fase 0 + auditoría R1 ──> Fase 6
 ```
 
 **Camino crítico:** Fase 0 → Fase 1 → entrega mínima viable que responde preguntas DRI presenciales.
+
+**Siguiente fase recomendada:** Fase 5 (Movilidad Virtual) — clon estructural de Fase 1, mínimo esfuerzo, máximo retorno.
 
 ---
 
@@ -1062,9 +1152,9 @@ Fase 0 + auditoría R1 ──> Fase 6
 
 ```
 main                    ← producción
-├── phase-0-foundation
-├── phase-1-balance-presencial
-├── phase-2-export-snies
+├── phase-0-foundation          ✅ merged
+├── phase-1-balance-presencial  ✅ merged
+├── phase-2-export-snies        ✅ merged
 ├── phase-3-detalle-movilidad
 ├── phase-4-internacionales
 ├── phase-5-virtual
@@ -1088,10 +1178,10 @@ Formato: `tipo(fase): descripción`
 **Ejemplos:**
 
 ```
-feat(phase-1): agrega evolución temporal con dos series E/S
-fix(phase-0): corrige DISTINCTCOUNT en medida Personas
-docs(phase-0): documenta justificación de medida [% bajo Convenio]
-refactor(phase-2): mueve filtro de Dirección de DAX a slicer
+feat(phase-2): agrega página Export SNIES Saliente con tabla plana 18 columnas
+feat(phase-2): agrega página Export SNIES Entrante con columnas nombre
+feat(phase-2): agrega medida _Título Período SNIES
+docs(phase-2): documenta §7.8 revisado y §8.6/§8.7 en plan maestro
 ```
 
 ### 13.4 Pull Request — checklist obligatorio
@@ -1222,16 +1312,17 @@ El `.md` también evoluciona. Convención:
 
 - Cambios al plan = commit con tipo `docs(plan): descripción`.
 - Cambios mayores (nuevas secciones, reestructuración) → versionado semántico opcional en metadatos del documento:
-  - v1.0 — plan inicial aprobado (estado actual)
-  - v1.1 — ajustes menores entre fases
-  - v2.0 — reestructuración mayor
+  - v1.0 — plan inicial aprobado
+  - v1.1 — ajustes Fase 0
+  - v1.2 — ajustes Fase 1
+  - v1.3 — Fase 2 cerrada, §7.8 revisado, §8.6/§8.7 nuevos, §11.5.2 nuevo
 
 ### 14.10 Orden recomendado de ejecución de las fases
 
-1. **Fase 0** (foundation) — cerrar primero, sin excepciones.
-2. **Fase 1** (Balance Presencial) — entrega de mayor valor inmediato.
-3. **Fase 2** (Export SNIES) — resuelve dolor operativo concreto. Paralelizable con Fase 5 si hay capacidad.
-4. **Fase 5** (Movilidad Virtual) — clon estructural de Fase 1, bajo esfuerzo.
+1. **Fase 0** (foundation) — ✅ cerrada.
+2. **Fase 1** (Balance Presencial) — ✅ cerrada.
+3. **Fase 2** (Export SNIES) — ✅ cerrada.
+4. **Fase 5** (Movilidad Virtual) — clon estructural de Fase 1, bajo esfuerzo. **Siguiente.**
 5. **Fase 3** (Detalle) — ajuste menor, en cualquier momento después de Fase 0.
 6. **Fase 4** (Internacionales) — desbloqueada al resolver P1.
 7. **Fase 6** (Financiación) — auditoría de datos primero, luego implementación.
@@ -1250,8 +1341,8 @@ El `.md` también evoluciona. Convención:
 | **Estudiante Temporal** | Movilidad o visita corta. Origen `FCT_MOVILIDAD_ESTUDIANTE` o `FCT_VISITANTE_EXTRANJERO`. |
 | **Grano** | Nivel de detalle de una fila en la FCT. Ver §4.2. |
 | **Modalidad** | Presencial o Virtual. Derivada de `STR_DETALLE_ACTIVIDAD_CAL_AJT`. |
-| **Movilidad** | Evento de intercambio académico. Métrica: `SUM(NUM_NUMERO_MOVILIDAD_CAL)`. |
-| **Persona** | Individuo único. Métrica: `DISTINCTCOUNT(NUM_DIM_PERSONA_SK)`. |
+| **Movilidad** | Evento de intercambio académico. Métrica: `COUNTROWS(FCT_Movilidad_Estudiantil)`. |
+| **Persona** | Individuo único. Métrica: `DISTINCTCOUNT(STR_PERSONA_ID_NK)`. |
 | **Portabilidad** | Propiedad de una medida que funciona en múltiples alcances sin modificación. |
 | **Saliente (Outbound)** | Movilidad de estudiantes de La Sabana hacia el exterior. |
 | **SNIES** | Sistema Nacional de Información de la Educación Superior. Reporte normativo obligatorio en Colombia. |
