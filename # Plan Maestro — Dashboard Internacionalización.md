@@ -11,9 +11,9 @@
 | Arquitecto BI | [tu nombre] |
 | Plataforma | Power BI (formato `.pbip`) |
 | Versionado | Git |
-| Versión del documento | v1.3 |
-| Última actualización | 2026-05-27 |
-| Estado | Fase 2 cerrada · listo para Fase 5 |
+| Versión del documento | v1.4 |
+| Última actualización | 2026-06-10 |
+| Estado | v1.4 cerrada · P1, P4–P7 y R1 cerrados · Fases 3–8 desbloqueadas · siguiente: Fase 5 |
 
 ---
 
@@ -95,15 +95,19 @@ El dashboard debe convertirse en la **fuente oficial de verdad institucional** p
 3. Top de tipos de movilidad entrantes y salientes (actividades puntuales).
 4. Número de movilidades por destino u origen.
 5. Número de movilidades por tipos de movilidad.
-6. **(Datos existentes, no explotados todavía)** $ COP financiado para movilidad entrante en estudiantes, tipos de financiadores nacionales e internacionales.
+6. **(Datos existentes, no explotados todavía)** $ COP financiado para movilidad entrante en estudiantes, tipos de financiadores nacionales e internacionales. **(v1.4)** Cobertura auditada: máx. 6% (nacional) y 10% (internacional) por período; valores en múltiples monedas. Se explota como página exploratoria con salvaguardas obligatorias (§7.26, §8.10).
+7. **(Agregada v1.4)** Caracterización demográfica (sexo, edad) de estudiantes en movilidad — presencial y virtual. La DRI confirmó interés en ambas modalidades. Los visuales de atributos de persona (sexo, nivel, programa) usan `[Personas]` (DISTINCTCOUNT); la distribución etaria usa `[Movilidades]` con semántica de participación (§7.20, §7.22).
+8. **(Agregada v1.4)** ¿Cuál es la movilidad estudiantil nacional (destinos/orígenes dentro de Colombia) y cómo se comporta? Datos ya disponibles en la FCT.
 
 ### 3.2 Preguntas estratégicas faltantes (observación del arquitecto)
 
-La DRI hoy usa el dashboard como **herramienta de consulta**, no de decisión estratégica. Las 6 preguntas son descriptivas, ninguna pregunta de causalidad, retorno o priorización. El rediseño debe responder lo que piden, pero deja espacio para insights estratégicos no solicitados todavía:
+La DRI hoy usa el dashboard como **herramienta de consulta**, no de decisión estratégica. Las preguntas priorizadas son descriptivas, ninguna pregunta de causalidad, retorno o priorización. El rediseño debe responder lo que piden, pero deja espacio para insights estratégicos no solicitados todavía:
 
 - ¿Cuál es la balanza neta entrante vs saliente y cómo evoluciona?
 - ¿Quiénes son los estudiantes regulares extranjeros y cómo evoluciona la atracción?
 - ¿Qué peso tiene la modalidad virtual frente a presencial?
+- ¿Cuál es el perfil demográfico típico del estudiante en movilidad y varía por modalidad?
+- ¿Cómo se compara la movilidad nacional con la internacional en volumen y tendencia?
 
 ---
 
@@ -120,6 +124,14 @@ Construida mediante `Table.Combine` (append) de tres fuentes, discriminadas por 
 | `FCT_MOVILIDAD_ESTUDIANTE` | Eventos de movilidad bidireccional | Temporal |
 | `FCT_VISITANTE_EXTRANJERO` | Visitantes extranjeros | Temporal |
 | `FCT_MATRICULADOS` | Matrícula regular | Regular |
+
+#### 4.1.1 Campos demográficos disponibles en la FCT (agregado v1.4)
+
+| Campo | Tipo | Ubicación | Nota |
+|---|---|---|---|
+| `NUM_EDAD_CAL_AJT` | Entero | `FCT_Movilidad_Estudiantil` | Edad al momento del evento. Calculada en PQ. Varía por fila — una persona puede tener edades distintas en eventos de distintos períodos. |
+
+**Implicación de grano:** como la edad vive en la FCT (grano evento), un visual que agrupe por rango de edad podría asignar la misma persona a múltiples rangos si participó en eventos en diferentes edades. Resuelto en §7.22: se acepta la duplicación con semántica de participación, métrica `[Movilidades]`.
 
 ### 4.2 Grano
 
@@ -147,7 +159,8 @@ NUM_DIM_PERSONA_SK
 |---|---|
 | Dirección | `STR_CLASIFICACION_MOVILIDAD_CAL_AJT` → "Saliente" (OUTBOUND) / "Entrante" (INBOUND) |
 | Tipo de Estudiante | "Regular" si origen = `FCT_MATRICULADOS`, "Temporal" en otro caso |
-| Modalidad | "Virtual" si `STR_DETALLE_ACTIVIDAD_CAL_AJT` contiene "virtual", "Presencial" en otro caso |
+| Modalidad | `FCT_Movilidad_Estudiantil[Modalidad]` — columna materializada en PQ. "Virtual" si `STR_DETALLE_ACTIVIDAD_CAL_AJT` contiene "virtual", "Presencial" en otro caso. Confirmada v1.4. |
+| Rango de Edad | Columna calculada en PQ derivada de `NUM_EDAD_CAL_AJT`, buckets de §7.23 + columna auxiliar de sort. **A implementar en Fase 7.** |
 
 ### 4.4 Volumen y actualización
 
@@ -165,6 +178,26 @@ NUM_DIM_PERSONA_SK
 | Ubicación Geográfica | `NUM_DIM_UBICACION_GEOGRAFICA_SK` |
 | Convenio | `NUM_DIM_CONVENIO_SK_CAL` |
 | Ubicación Financiación | `NUM_DIM_UBICACION_GEOGRAFICA_FINAN_SK_CAL` |
+
+### 4.6 Campos demográficos disponibles (agregado v1.4)
+
+| Campo | Ubicación | Tipo | Nota |
+|---|---|---|---|
+| Sexo | `DIM_PERSONA.STR_COD_GENERO_AJT` | Categórico | ~17 registros sin valor asignado detectados en mockup stakeholder (1.228 personas vs 1.211 con sexo). Nombre confirmado v1.4. |
+| `NUM_EDAD_CAL_AJT` | `FCT_Movilidad_Estudiantil` | Entero | Edad al momento del evento. Ver §4.1.1 para implicación de grano. |
+
+**Tratamiento de nulos en sexo:** los registros sin valor se muestran como categoría **"Sin dato"** en visuales demográficos. Justificación: ocultar registros sin sexo falsea el total de personas. Transparencia sobre completitud > limpieza cosmética. Ver §7.21.
+
+### 4.7 Campos financieros disponibles (agregado v1.4)
+
+| Campo | Ubicación | Tipo | Nota |
+|---|---|---|---|
+| `NUM_VALOR_FINAN_NACIONAL_CAL_AJT` | FCT | Numérico | Valor de financiación nacional del evento. Cobertura máx. 6% por período (R1 cerrado). |
+| `STR_MONEDA_FINAN_NACIONAL_CAL_AJT` | FCT | Categórico | Moneda del valor nacional. `"NFD"` = sin dato de financiación. |
+| `NUM_VALOR_FINAN_INTERNACIONAL_CAL_AJT` | FCT | Numérico | Valor de financiación internacional del evento. Cobertura máx. 10% por período (R1 cerrado). |
+| `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT` | FCT | Categórico | Moneda del valor internacional. `"NFD"` = sin dato de financiación. |
+
+**Regla dura:** valores en monedas distintas **no se suman en ningún visual**. No existe tasa de cambio histórica confiable en el modelo; toda agregación monetaria se segmenta por moneda. Ver §7.26.
 
 ---
 
@@ -311,16 +344,20 @@ Ningún componente se declara terminado sin entregar:
 
 ## 7. Decisiones arquitectónicas tomadas
 
-### 7.1 Decisión: 6 páginas separadas (no 4, no 8)
+### 7.1 Decisión: 10 páginas separadas (no 4, no 8)
 
 - **Tipo:** estructura del producto.
 - **Por qué:** cada página tiene audiencia y propósito **mutuamente excluyentes**. No hay solapamiento funcional.
 - **Trade-off aceptado:** más navegación, más mantenimiento. Mitigado con menú lateral persistente agrupado por bloques.
 - **Alternativas descartadas:**
   - 3 páginas con tabs/bookmarks → mezcla niveles analíticos, viola principio 5.4.
-  - 8+ páginas con cortes adicionales → fragmenta la lectura ejecutiva.
+  - Cortes adicionales sin pregunta propia → fragmenta la lectura ejecutiva.
 
-> **Nota Fase 2 (2026-05-27):** el conteo real sube a 7 páginas. Export SNIES se divide en dos páginas independientes (Saliente + Entrante) en lugar de una con bookmarks. Ver §7.8 revisado.
+> **Nota Fase 2 (2026-05-27):** el conteo subió a 7 con Export SNIES dividido en dos páginas. Ver §7.8 revisado.
+
+> **Nota v1.4 (2026-06-09):** el conteo sube a 9. Se integran dos páginas no documentadas previamente: "Caracterización Estudiantes en Movilidad" (legado a conformar, §8.8) y "Movilidad Nacional" (nueva, §8.9).
+
+> **Nota v1.4 — cierre (2026-06-10):** el conteo sube a 10 con la página "Financiación — Exploratoria" (§8.10, §7.26).
 
 ### 7.2 Decisión: Movilidad Virtual como página propia, no bookmark
 
@@ -331,7 +368,7 @@ Ningún componente se declara terminado sin entregar:
 
 ### 7.3 Decisión: `Modalidad` como filtro de alcance en panel oculto
 
-- **Decisión:** aplicar `Modalidad = "Presencial"` en panel de página oculto y bloqueado para la página Balance Presencial; `Modalidad = "Virtual"` para la página Virtual.
+- **Decisión:** aplicar `FCT_Movilidad_Estudiantil[Modalidad] = "Presencial"` en panel de página oculto y bloqueado para la página Balance Presencial; `FCT_Movilidad_Estudiantil[Modalidad] = "Virtual"` para la página Virtual. Columna materializada en PQ, confirmada v1.4 (§4.3).
 - **Tipo de filtro:** alcance.
 - **Capa elegida:** panel de página.
 - **Por qué acá y no en DAX:** la métrica "Movilidades" no cambia su definición. Cambia el universo. Crear `[Movilidades Presenciales]` y `[Movilidades Virtuales]` sería hardcodear el contexto en la medida — anti-patrón directo.
@@ -342,7 +379,7 @@ Ningún componente se declara terminado sin entregar:
 
 - **Aplicación:**
   - Balance Presencial / Virtual → `STR_TABLA_ORIGEN_CAL IN {"FCT_MOVILIDAD_ESTUDIANTE", "FCT_VISITANTE_EXTRANJERO"}` (excluye matriculados regulares).
-  - Internacionales en La Sabana → `STR_TABLA_ORIGEN_CAL = "FCT_MATRICULADOS"` + filtro adicional de país ≠ Colombia (pendiente validación, ver §10).
+  - Internacionales en La Sabana → `STR_TABLA_ORIGEN_CAL = "FCT_MATRICULADOS"` + filtro adicional de país ≠ Colombia (validado — P1 cerrado: el campo país representa la nacionalidad del estudiante).
 - **Tipo:** alcance.
 - **Capa:** panel oculto.
 - **Por qué:** mismas razones que `Modalidad`. La medida `Movilidades` sigue siendo la misma; cambia el universo.
@@ -367,6 +404,8 @@ En la página Balance, la dirección se trata distinto según el visual:
 | Top tipos de movilidad | Dos visuales lado a lado | Catálogos de actividades distintos entre entrante y saliente. |
 
 **Importante:** los tops "separados" no se logran con medidas filtradas. Se logran con dos visuales que comparten la misma medida `Movilidades` y se diferencian por filtro de visual (`Dirección = "Entrante"` en uno, `Dirección = "Saliente"` en otro). El filtro a nivel de visual no contamina la medida.
+
+> **Nota:** §7.13 documenta el desvío final implementado en Fase 1 — un solo visual por top con Dirección como serie interna.
 
 ### 7.7 Decisión: dona "% bajo convenio" → tarjeta KPI
 
@@ -394,7 +433,7 @@ En la página Balance, la dirección se trata distinto según el visual:
 
 Habrá UNA medida `[Movilidades]` y UNA medida `[Personas]`. **No** habrá `[Movilidades Entrantes]`, `[Movilidades Virtuales]`, `[Movilidades de Matriculados]`. El contexto (página, slicer, filtro de visual) hace el resto.
 
-Excepciones legítimas: medidas que sí codifican definición intrínseca (no contexto), como `[% bajo convenio]`, `[Razón Entrante/Saliente]`. Cada una con su bloque de justificación al crearse.
+Excepciones legítimas: medidas que sí codifican definición intrínseca (no contexto), como `[% bajo convenio]`, `[Razón Entrante/Saliente]`, o las medidas de cobertura de financiación (§7.26). Cada una con su bloque de justificación al crearse.
 
 ### 7.10 Decisión: Movilidades = COUNTROWS, no SUM
 
@@ -428,7 +467,7 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Por qué:** permite ver E/S simultáneamente en un vistazo. Con filtro de visual separado, el usuario necesitaba comparar dos visuales apilados — mayor carga cognitiva para directivos. La paleta consistente (`#2E5597` Entrante, `#BDD7EE` Saliente) preserva la lectura E/S sin necesidad de visuales separados.
 - **Consecuencia:** la "decisión de implementación" Edit Interactions → None (planeada originalmente para evitar conflicto entre slicer y filtro de visual) deja de aplicar. No hay conflicto porque no existe filtro de visual por Dirección — el slicer pasa limpio a través del visual.
 - **Trade-off aceptado:** visual más denso. Mitigado con Top N (§7.14).
-- **Test de portabilidad:** mismo patrón replicable en Fase 5 (Movilidad Virtual).
+- **Test de portabilidad:** mismo patrón replicable en Fase 5 (Movilidad Virtual) y Fase 8 (Movilidad Nacional).
 
 ### 7.14 Decisión: Top 5 con filtro nativo + tooltip pages diferidas
 
@@ -468,6 +507,103 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Por qué:** el coordinador valida visualmente por nombre (más legible), pero el flujo SNIES downstream necesita el código ISO. Incluir ambos evita que el coordinador tenga que hacer lookup mental código↔nombre.
 - **Trade-off aceptado:** una columna adicional por cada campo de país. Ancho de tabla aumenta marginalmente.
 
+### 7.19 Decisión: Caracterización demográfica como página única con Modalidad como slicer (v1.4)
+
+- **Decisión:** una sola página "Caracterización Estudiantes en Movilidad" cubre ambas modalidades (Presencial + Virtual). `Modalidad` se trata como **slicer de exploración** en esta página, no como filtro de alcance en panel oculto.
+- **Tipo de filtro:** exploración (Modalidad).
+- **Capa elegida:** slicer.
+- **Alternativas descartadas:**
+  - *Opción B (dos páginas por modalidad, clon estructural):* consistente con Balance/Virtual, pero la pregunta demográfica es transversal a modalidad. Duplicar la página solo para cambiar el filtro de alcance viola §9 #6 (replicar lógica de alcance en N páginas cuando un slicer lo resuelve).
+  - *Opción C (integrar demografía dentro de §8.3 Movilidad Virtual):* rompe el supuesto de clon estructural de Balance, contamina dos propósitos analíticos en una página (flujo E/S + demografía), viola §9 #4.
+- **Por qué Opción A:** sexo y edad son atributos del individuo, no del evento. La misma persona puede aparecer en ambas modalidades. Una página única con Modalidad como slicer permite comparación directa y absorbe futuras modalidades sin nueva página.
+- **Trade-off aceptado:** rompe el patrón "una página por modalidad" usado en Balance/Virtual. Aceptable porque la pregunta demográfica es conceptualmente distinta (¿quién se mueve?) vs la pregunta de Balance (¿cuánto se mueven y hacia dónde?).
+- **Test de portabilidad:** `[Personas]` es portable. Si mañana se agrega una tercera modalidad, el slicer la absorbe sin nueva página ni nueva medida.
+
+### 7.20 Decisión: métrica por tipo de atributo en visuales demográficos (v1.4, precisada en cierre)
+
+- **Decisión:** los visuales de **atributos del individuo** (sexo, nivel académico, unidad/programa) usan `[Personas]` (DISTINCTCOUNT sobre `STR_PERSONA_ID_NK`). El visual de **distribución etaria** usa `[Movilidades]` — excepción documentada en §7.22, porque en este modelo la edad es atributo del evento (vive en la FCT) y la semántica elegida es participación.
+- **Tipo:** definición intrínseca de visuales demográficos.
+- **Por qué:** para atributos estables del individuo, usar `[Movilidades]` (COUNTROWS) inflaría la representación de personas con múltiples eventos — una persona con 3 movilidades contaría 3 veces en la distribución de sexo. Eso responde "¿cuántas movilidades por sexo?", no "¿cómo se distribuyen las personas por sexo?" (lo que la DRI pide). Para la edad, la relación se invierte: el atributo varía por evento, y la pregunta confirmada es "¿a qué edades se participa?" (§7.22).
+- **Trade-off aceptado:** dos métricas conviven en la misma página. Mitigación: los títulos de visual hacen explícita la unidad ("Personas por..." vs "Participaciones por...").
+- **Test de portabilidad:** ambas medidas son portables y funcionan en cualquier contexto de filtro (período, modalidad, dirección).
+
+### 7.21 Decisión: nulos de sexo se muestran como "Sin dato" (v1.4)
+
+- **Decisión:** registros sin valor de sexo en `DIM_PERSONA.STR_COD_GENERO_AJT` se muestran como categoría visible **"Sin dato"** en los visuales demográficos.
+- **Tipo:** UX / integridad de datos.
+- **Por qué:** ocultar ~17 registros sin sexo falsearía el total de personas. El directivo vería [Personas] = 1.228 en la tarjeta KPI pero solo 1.211 sumadas en el gráfico de sexo. La discrepancia genera desconfianza. Transparencia sobre completitud > limpieza cosmética.
+- **Trade-off aceptado:** una categoría visual adicional ("Sin dato") en el gráfico. Impacto visual mínimo dado el volumen bajo.
+- **Test de portabilidad:** tratamiento aplicable a cualquier campo demográfico con nulos.
+
+### 7.22 Decisión: edad por evento — se acepta duplicación (v1.4, cerrada)
+
+- **Decisión:** el visual de distribución por rango de edad usa `NUM_EDAD_CAL_AJT` del evento **sin desambiguar por persona**. Una persona que participó a distintas edades cuenta en cada rango correspondiente. Opción C confirmada.
+- **Semántica elegida:** "¿a qué edades se participa en movilidad?" — no "¿qué edad tienen los participantes?".
+- **Métrica del visual:** `[Movilidades]` (COUNTROWS), no `[Personas]`. El eje es rango de edad, la métrica es participaciones por rango.
+- **Trade-off aceptado:** la suma del gráfico de edad puede ser mayor que la tarjeta KPI `[Personas]`. Mitigación: el título del visual dice **"Participaciones por rango de edad"**, no "Personas por rango de edad". Esto alinea la expectativa del directivo con la semántica real.
+- **Alternativas descartadas:**
+  - *Opción A (edad del último evento):* respondería "¿qué edad tienen hoy los participantes?" — pregunta válida pero no la que la DRI prioriza. Requiere columna PQ auxiliar.
+  - *Opción B (edad del primer evento):* respondería "¿a qué edad empezaron?" — relevante pero no prioritario. Misma complejidad que A.
+- **Impacto técnico:** cero complejidad adicional. No requiere columna PQ auxiliar ni medida DAX nueva. Solo el campo `NUM_EDAD_CAL_AJT` agrupado por rango.
+- ~~**Pendiente asociado:** P4 (§10.1).~~ **P4 cerrado.**
+
+### 7.23 Decisión: rangos de edad — buckets confirmados (v1.4, cerrada)
+
+- **Decisión:** los rangos de edad para el visual de distribución son los siguientes, confirmados por la DRI:
+
+| Bucket | Rango | Nota |
+|---|---|---|
+| 15–17 | `NUM_EDAD_CAL_AJT` entre 15 y 17 | Menores de edad en movilidad. |
+| 18–25 | entre 18 y 25 | Pregrado típico. Grupo dominante esperado. |
+| 26–30 | entre 26 y 30 | Posgrado joven / final de pregrado tardío. |
+| 31–40 | entre 31 y 40 | Posgrado / educación continua. |
+| 41–50 | entre 41 y 50 | Educación continua / ejecutiva. |
+| Mayor 50 | 51+ | — |
+| Revisar | Todo lo demás | Red de seguridad: nulos, ceros, negativos, valores atípicos (>120, <15). Señal de calidad de datos. |
+
+- **Tipo:** regla de negocio.
+- **Implementación:** columna calculada en PQ sobre la FCT, derivada de `NUM_EDAD_CAL_AJT`. Lógica `if/else` que asigna el bucket como texto. El orden visual en el gráfico debe respetar el orden lógico de la tabla (no alfabético).
+- **Ordenamiento:** columna auxiliar numérica de sort (`1` a `7`) para forzar orden correcto en el eje del visual (Sort By Column). Sin esta columna, Power BI ordenaría alfabéticamente — la columna de sort lo hace explícito y robusto.
+- ~~**Pendiente asociado:** P6 (§10.1).~~ **P6 cerrado.**
+
+### 7.24 Decisión: Movilidad Nacional como clon de Balance con swap geográfico→programa (v1.4, cerrada)
+
+- **Decisión:** se agrega una página "Movilidad Nacional" al bloque ANÁLISIS. Es **clon estructural de Balance** (§8.2) con un único cambio: el top geográfico (países) se reemplaza por **Top Programas Académicos** (Unidad Académica → Programa, con drilldown). Filtro de alcance: `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"`.
+- **Tipo:** estructura del producto.
+- **Alcance (panel oculto):** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"` AND `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`.
+- **Por qué clon + swap:** la movilidad nacional no tiene granularidad geográfica debajo de país (departamento mal diligenciado — restricción de calidad de datos documentada). Un top de países mostraría solo "Colombia". En cambio, el programa académico de La Sabana responde una pregunta que ninguna otra página cubre: "¿de qué programas salen y a qué programas llegan en movilidad nacional?".
+- **Programas:** solo de La Sabana (no de la institución externa). El campo usa la misma jerarquía Unidad Académica → Programa que Caracterización (§8.8), pero con métrica `[Movilidades]`.
+- **Trade-off aceptado:** la página deja de ser clon puro (tiene un visual distinto), pero la diferencia es mínima: un solo visual cambia de eje, no de métrica ni de tipo de gráfico.
+- **Restricción de calidad documentada:** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD` no tiene departamento/ciudad con diligenciamiento confiable. Si se corrige en el futuro, se puede agregar un top geográfico sin romper nada.
+- **Filtros (slicers):** configuración a validar durante implementación (Fase 8) para evitar redundancia con Balance y otras páginas. Ver §10.3.
+- **Test de portabilidad:** `[Movilidades]` y `[Personas]` funcionan idénticas con el nuevo filtro de alcance. Cero medidas nuevas.
+
+### 7.25 Decisión: página de Caracterización existente es legado a conformar (v1.4)
+
+- **Decisión:** la página "Caracterización Estudiantes en Movilidad" que existe actualmente en el dashboard es legado previo al rediseño. Se conforma a los estándares del plan (cuadro de texto de alcance, documentación de filtros, medidas portables, naming) y se extiende para cubrir ambas modalidades (§7.19) durante Fase 7.
+- **Tipo:** conformación + extensión.
+- **Estado actual:** funcional pero no documentada en el plan. Alcance actual: temporales presenciales. Construida fuera de las convenciones del plan.
+- **Acción en Fase 7:** auditar visuales y medidas contra estándares §5.2, §9, §11. Reemplazar medidas no portables si existen. Agregar Modalidad como slicer. Agregar cuadro de texto de alcance.
+
+### 7.26 Decisión: Financiación como página exploratoria multi-moneda (v1.4, cerrada)
+
+- **Decisión:** la financiación se explota en **página propia marcada como "Exploratoria"** (§8.10), estructurada en dos capas: conteo de movilidades financiadas (confiable) y valores segmentados por moneda (exploratorio). **Nunca se suman valores entre monedas.**
+- **Tipo:** estructura del producto + integridad de datos.
+- **Por qué:** cobertura máxima auditada de 6% (nacional) y 10% (internacional) por período (R1 cerrado). Mostrar montos sin salvaguarda induciría decisiones sobre datos que representan una fracción mínima del universo. Además los valores viven en múltiples monedas — un KPI agregado entre monedas sería matemáticamente inválido.
+- **Medidas de cobertura (definición intrínseca, van en DAX):** `[Movilidades Financiadas Nacional]`, `[% Cobertura Financiación Nacional]`, `[Movilidades Financiadas Internacional]`, `[% Cobertura Financiación Internacional]`. El filtro `STR_MONEDA_FINAN_* <> "NFD"` **define** qué es "financiada" — es el numerador del KPI, no alcance de página. Pasa el test de portabilidad (§6.2): las medidas funcionan idénticas en cualquier página o contexto de filtro. Carpeta `_Medidas/Financiación/`.
+- **Salvaguardas obligatorias:**
+  1. Cuadro de texto de alcance reforzado con advertencia explícita (texto en §8.10).
+  2. Todo valor monetario visible va acompañado del % de cobertura del contexto seleccionado.
+  3. Título de página con marca "Exploratoria".
+  4. Prohibido todo visual que agregue valores de monedas distintas.
+- **Alternativas descartadas:**
+  - *No construir la página:* la DRI la solicita y los datos, aunque parciales, existen. Negar acceso es peor que entregar con salvaguardas.
+  - *Convertir a moneda única:* no hay tasa de cambio histórica confiable en el modelo. Introducir conversiones inventadas es peor que segmentar por moneda.
+  - *Integrar visuales financieros en Balance:* contaminaría una página con datos completos con métricas de cobertura 6–10% — el contraste de confiabilidad dentro de una misma página confunde. Página separada aísla el riesgo.
+- **Trade-off aceptado:** página con 8 visuales (uno sobre el límite §9 #4), justificado porque 4 son tarjetas KPI en una sola fila y la dualidad nacional/internacional duplica necesariamente los visuales de valor.
+- **Test de portabilidad:** medidas de cobertura portables. Si mañana se audita y mejora la captura del dato financiero, la página no cambia — solo mejoran sus números.
+- ~~**Riesgo asociado:** R1 (§10.2).~~ **R1 cerrado.**
+
 ---
 
 ## 8. Arquitectura de páginas
@@ -484,16 +620,21 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 │  ANÁLISIS                                                │
 │  ├─ 2. Balance de Movilidad Presencial                  │
 │  ├─ 3. Movilidad Virtual                                │
-│  └─ 4. Internacionales en La Sabana                     │
+│  ├─ 4. Internacionales en La Sabana                     │
+│  ├─ 5. Caracterización Estudiantes en Movilidad         │
+│  ├─ 6. Movilidad Nacional                               │
+│  └─ 7. Financiación (Exploratoria)                      │
 │                                                          │
 │  OPERACIÓN                                               │
-│  ├─ 5. Detalle Movilidad                                │
-│  ├─ 6. Export SNIES Saliente                            │
-│  └─ 7. Export SNIES Entrante                            │
+│  ├─ 8. Detalle Movilidad                                │
+│  ├─ 9. Export SNIES Saliente                            │
+│  └─ 10. Export SNIES Entrante                           │
 └─────────────────────────────────────────────────────────┘
 ```
 
 > **Nota:** desde Home, Export SNIES se muestra como entrada única que aterriza en Saliente. La navegación interna Saliente↔Entrante se hace con botones tipo tab dentro de las páginas SNIES.
+
+> **Nota v1.4:** Caracterización (5) es legado a conformar + extender (Fase 7). Movilidad Nacional (6) es página nueva (Fase 8). Financiación (7) es página nueva exploratoria (Fase 6). El conteo final es 10 páginas. Ver §7.1 revisado.
 
 ### 8.1 Cobertura Internacional *(existente, sin cambios)*
 
@@ -567,14 +708,13 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 
 - **Audiencia:** directivos + DRI.
 - **Pregunta:** ¿Quiénes nos eligen para estudiar (regular o temporalmente)?
-- **Alcance (panel oculto):** país ≠ Colombia (todos los orígenes).
+- **Alcance (panel oculto):** país ≠ Colombia, todos los orígenes. **(v1.4)** Validado: el campo país representa la nacionalidad del estudiante (P1 cerrado, §10.1) — el filtro identifica correctamente a los extranjeros.
 - **Visuales clave:**
   - KPIs: total internacionales, desglose Regular vs Temporal.
   - Mapa de países origen.
   - Distribución por programa / nivel.
   - Evolución temporal de atracción.
   - Top instituciones de procedencia (solo Temporales).
-- **Pendiente bloqueante:** ver §10.
 
 ### 8.5 Detalle Movilidad *(ajuste menor sobre lo existente)*
 
@@ -667,6 +807,173 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 
 Misma configuración de tabla visual que §8.6.
 
+### 8.8 Caracterización Estudiantes en Movilidad *(legado a conformar + extender — v1.4)*
+
+- **Audiencia:** directivos + DRI.
+- **Pregunta:** ¿Cuál es el perfil demográfico (sexo, edad, nivel académico) de los estudiantes en movilidad? (§3.1 P7)
+- **Alcance (panel oculto):** `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}` (excluye matriculados regulares). **Sin filtro de Modalidad en panel** — Modalidad es slicer de exploración (§7.19).
+- **Cuadro de texto visible:** "Esta página analiza el perfil demográfico de estudiantes temporales en movilidad (entrantes y salientes). Incluye modalidad presencial y virtual. Excluye estudiantes regulares matriculados. Use el filtro Modalidad para comparar."
+- **Estado actual:** página legado existente en el dashboard. Funcional pero construida fuera de las convenciones del plan. Alcance actual limitado a temporales presenciales. No tiene cuadro de texto de alcance.
+
+**Estructura visual confirmada (v1.4):**
+
+Layout sobre canvas 1920×1080 (área útil descontando panel lateral de slicers y barra inferior):
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  [Personas]        [Movilidades]    [Prom. Duración]     │ 65px
+├──────────────────────────────────────────────────────────┤
+│  Distribución por sexo    │  Participaciones por rango   │ 260px
+│  (barras horizontales)    │  de edad (barras horiz.)     │
+├──────────────────────────────────────────────────────────┤
+│  Nivel académico          │  Unidad Académica → Programa │ 260px
+│  (barras horizontales)    │  (barras horiz. + drilldown) │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Fila 1 — KPIs (65px):**
+
+| KPI | Medida | Nota |
+|---|---|---|
+| Personas | `[Personas]` | Métrica central de la página. |
+| Movilidades | `[Movilidades]` | Siempre junto a Personas (§4.2). Permite lectura de ratio movilidades/persona. |
+| Promedio duración (días) | `AVERAGE(NUM_DURACION_DIAS_CAL_AJT)` | Medida nueva `[Promedio Duración Días]` a documentar según §5.2 en Fase 7. Caracteriza la experiencia, no solo al individuo. |
+
+**Fila 2 — Perfil demográfico (260px):**
+
+| Visual | Métrica | Tipo | Nota |
+|---|---|---|---|
+| Distribución por sexo | `[Personas]` por `DIM_PERSONA[STR_COD_GENERO_AJT]` | Clustered Bar horizontal | Incluye "Sin dato" para nulos (§7.21). No dona — §9 #5. |
+| Participaciones por rango de edad | `[Movilidades]` por rango de `NUM_EDAD_CAL_AJT` | Clustered Bar horizontal | Título dice "Participaciones", no "Personas" (§7.22). Rangos confirmados (§7.23). |
+
+**Fila 3 — Contexto académico (260px):**
+
+| Visual | Métrica | Tipo | Nota |
+|---|---|---|---|
+| Nivel académico | `[Personas]` por nivel (Pregrado/Posgrado) | Clustered Bar horizontal | Máximo 2–3 categorías. |
+| Unidad Académica → Programa | `[Personas]` por Unidad Académica (drilldown a Programa Académico) | Clustered Bar horizontal con jerarquía nativa | Descendente por [Personas]. Drilldown nativo de PBI, sin medida nueva. |
+
+**Total: 7 visuales (3 KPIs + 4 gráficos).** Dentro del límite §9 #4.
+
+**Visuales del legado descartados:**
+
+| Visual legado | Veredicto | Razón |
+|---|---|---|
+| Países involucrados (KPI) | ❌ | Cobertura geográfica, no demografía. Vive en §8.1. |
+| Tipos de actividad (lista) | ❌ | Ya respondido en Balance (Top Tipos, §8.2 Fila 3). Duplicaría información. |
+| Evolución temporal | ❌ | Ya en Balance (§8.2), Virtual (§8.3), Nacional (§8.9). No aporta pregunta nueva acá. |
+
+**Elementos transversales:**
+- Paleta E/S consistente: `#2E5597` Entrante, `#BDD7EE` Saliente.
+- Subtítulo dinámico heredado de plantilla.
+- Cuadro de texto de alcance visible bajo subtítulo.
+- Slicers: panel lateral estándar (§11.5.1) + **Modalidad** como slicer adicional al final del panel.
+
+**Acciones de conformación (Fase 7):**
+1. Auditar medidas existentes contra §5.2, §9, §11.
+2. Reemplazar medidas no portables si existen.
+3. Agregar Modalidad como slicer de exploración.
+4. Agregar cuadro de texto de alcance.
+5. Remover filtro de Modalidad del panel oculto (si existe) y delegar al slicer.
+6. ~~Definir rangos de edad con DRI (P6).~~ Cerrado: 7 buckets confirmados (§7.23). Implementar columna PQ + sort.
+7. ~~Resolver desambiguación edad-persona (§7.22, P4).~~ Cerrado: Opción C, se acepta duplicación.
+
+### 8.9 Movilidad Nacional *(nueva — v1.4, clon de Balance con swap geográfico→programa)*
+
+- **Audiencia:** directivos + DRI.
+- **Pregunta:** ¿Cuál es la movilidad estudiantil nacional (dentro de Colombia) y cómo se comporta? (§3.1 P8)
+- **Alcance (panel oculto):** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"` AND `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`.
+- **Cuadro de texto visible:** "Esta página analiza movilidad estudiantil temporal con destino/origen dentro de Colombia. Excluye estudiantes regulares matriculados y movilidad internacional."
+
+**Estructura visual confirmada — clon de §8.2 con un swap (layout idéntico a Balance):**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  [Movilidades]       [Personas]       [% Convenio]       │ 65px
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│            Evolución temporal (líneas E/S)                │ 240px
+│                                                          │
+├──────────────────┬──────────────────┬────────────────────┤
+│  Top Programas   │  Top Tipos Mov   │  Top Instituciones │ 280px
+│  (UA→Programa    │  (E + S juntos)  │  (E + S juntos)    │
+│   drilldown)     │                  │                    │
+└──────────────────┴──────────────────┴────────────────────┘
+```
+
+| Fila | Visual | Métrica | Tipo | Nota |
+|---|---|---|---|---|
+| 1 — KPIs | Movilidades | `[Movilidades]` | Tarjeta | Portable, cero cambios. |
+| 1 — KPIs | Personas | `[Personas]` | Tarjeta | Portable, cero cambios. |
+| 1 — KPIs | % Bajo Convenio | `[% Bajo Convenio]` | Tarjeta | Portable, cero cambios. |
+| 2 — Evolución | Evolución E/S | `[Movilidades]` por período | Línea con series E/S | Eje categórico `YYYY-N` (§11.4.4). Configuración idéntica a §8.2. |
+| 3 — Tops | **Top Programas Académicos** | `[Movilidades]` por Unidad Académica → Programa | Clustered Bar horizontal + drilldown | **SWAP**: reemplaza Top Países de Balance. Solo programas La Sabana. Descendente por [Movilidades]. Dirección como serie interna (§7.13); interacción Top N + jerarquía a validar en Fase 8. |
+| 3 — Tops | Top Tipos de Movilidad | `[Movilidades]` por tipo | Clustered Bar horizontal | Idéntico a Balance (§7.13, §7.14). |
+| 3 — Tops | Top Instituciones | `[Movilidades]` por institución | Clustered Bar horizontal | Instituciones colombianas. Idéntico a Balance. |
+
+**Total: 7 visuales (3 KPIs + 4 gráficos).** Idéntico a Balance excepto el swap en Fila 3.
+
+**Medidas nuevas requeridas:** cero. Reutilización total de medidas portables.
+
+**Restricción de calidad documentada:** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD` no tiene departamento/ciudad con diligenciamiento confiable para movilidad nacional. Si se corrige en el futuro, se puede agregar un top geográfico subnacional sin romper la página.
+
+**Slicers:** panel lateral estándar (§11.5.1). Configuración final de filtros a validar durante implementación (Fase 8) para evitar redundancia con Balance y otras páginas — en particular el slicer País, que es tautológico en esta página.
+
+**Nota sobre solapamiento con Balance (§7.24, §10.3):** Balance Presencial y Virtual no filtran por país — incluyen eventos nacionales. Esta página sí filtra explícitamente a Colombia. No se modifica el alcance de páginas cerradas.
+
+### 8.10 Financiación de Movilidad — Exploratoria *(nueva — v1.4)*
+
+- **Audiencia:** DRI (uso interno; no respalda decisiones presupuestales).
+- **Pregunta:** ¿Cuántas movilidades reciben financiación, de qué tipo, y qué montos están registrados? (§3.1 P6)
+- **Alcance (panel oculto):** `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`.
+- **Cuadro de texto reforzado (obligatorio, §7.26):** "⚠️ Página exploratoria — datos financieros con cobertura limitada: hasta 6% en financiación nacional y hasta 10% en internacional por período. Las cifras representan registros diligenciados, no el total real. Valores en múltiples monedas — no se suman entre sí. No usar como base para decisiones presupuestales."
+- **Título de página:** incluye la marca "Exploratoria".
+
+**Estructura visual confirmada (v1.4) — dos capas: conteo (confiable) y valor (exploratorio):**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ [Mov. Fin. Nal] [% Cob. Nal] [Mov. Fin. Intl] [% Cob. Intl] │ 65px
+├──────────────────────────────────────────────────────────┤
+│  Financiación nacional     │  Financiación internacional │ 240px
+│  por moneda (tabla)        │  por moneda (tabla)         │
+├──────────────────────────────────────────────────────────┤
+│  Mov. financiadas por      │  Mov. financiadas por       │ 240px
+│  UA → Programa (barras)    │  dirección E/S (barras)     │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Fila 1 — KPIs de cobertura (lo confiable):**
+
+| KPI | Medida | Nota |
+|---|---|---|
+| Movilidades con financiación nacional | `[Movilidades Financiadas Nacional]` = COUNTROWS con `STR_MONEDA_FINAN_NACIONAL_CAL_AJT <> "NFD"` | Medida nueva, definición intrínseca (§7.26). |
+| % Cobertura nacional | `[% Cobertura Financiación Nacional]` = financiadas nal. / `[Movilidades]` | Transparencia de completitud. |
+| Movilidades con financiación internacional | `[Movilidades Financiadas Internacional]` = COUNTROWS con `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT <> "NFD"` | Medida nueva, definición intrínseca. |
+| % Cobertura internacional | `[% Cobertura Financiación Internacional]` = financiadas intl. / `[Movilidades]` | — |
+
+**Fila 2 — Valores por moneda (lo exploratorio):**
+
+| Visual | Métrica | Tipo | Nota |
+|---|---|---|---|
+| Financiación nacional por moneda | SUM(`NUM_VALOR_FINAN_NACIONAL_CAL_AJT`) por `STR_MONEDA_FINAN_NACIONAL_CAL_AJT` | Table/Matrix | Excluye "NFD". Una fila por moneda. **Sin fila de total general.** |
+| Financiación internacional por moneda | SUM(`NUM_VALOR_FINAN_INTERNACIONAL_CAL_AJT`) por `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT` | Table/Matrix | Ídem. |
+
+**Fila 3 — Contexto por conteo (sin problema de moneda):**
+
+| Visual | Métrica | Tipo | Nota |
+|---|---|---|---|
+| Movilidades financiadas por Unidad Académica → Programa | Conteo de financiadas (nal. o intl.) | Clustered Bar horizontal + drilldown | Responde "¿qué programas reciben más apoyo?" con conteo, no valor. |
+| Movilidades financiadas por dirección E/S | Conteo de financiadas por dirección | Clustered Bar horizontal | ¿Se financia más la saliente o la entrante? |
+
+**Total: 8 visuales (4 KPIs + 2 tablas + 2 gráficos).** Excepción justificada al límite §9 #4 (ver §7.26).
+
+**Prohibiciones (§7.26):** ningún visual suma valores entre monedas; ningún KPI de "total financiado" agregado; ningún valor monetario sin su % de cobertura visible en el mismo contexto.
+
+**Medidas nuevas:** 4 de cobertura (carpeta `_Medidas/Financiación/`), documentadas según §5.2 con bloque de justificación 5-puntos. Detalle fino de layout y formatos se ajusta en Fase 6.
+
+**Slicers:** panel lateral estándar (§11.5.1). Configuración final a validar en Fase 6.
+
 ---
 
 ## 9. Anti-patrones a rechazar
@@ -681,6 +988,7 @@ Misma configuración de tabla visual que §8.6.
 | 6 | Replicar lógica de alcance en N medidas | Aplicar el alcance una vez en la página, no N veces en DAX. |
 | 7 | "El equipo lee DAX, no necesita documentación" | La documentación al usuario va en cuadros de texto. DAX es para mantenedores. |
 | 8 | Dos métricas redundantes en mismo eje | Ej. Movilidades + Personas en misma línea — están correlacionadas, una en tooltip basta. |
+| 9 | Agregar valores monetarios de monedas distintas | Todo visual financiero se segmenta por moneda (§7.26). Un "total" inter-moneda es matemáticamente inválido. |
 
 ---
 
@@ -690,18 +998,24 @@ Misma configuración de tabla visual que §8.6.
 
 | # | Pendiente | Bloquea fase | Responsable |
 |---|---|---|---|
-| P1 | Validar semántica del campo país en `FCT_Movilidad_Estudiantil` para registros de origen `FCT_MATRICULADOS`. ¿Representa nacionalidad del matriculado o algo distinto? Determina si filtrar por país ≠ Colombia es válido para identificar internacionales regulares. | Fase 4 | Equipo modelado |
+| ~~P1~~ | ✅ **Cerrado (v1.4).** El campo país en `DIM_UBICACION_GEOGRAFICA_MOVILIDAD` para registros de `FCT_MATRICULADOS` representa la **nacionalidad** del estudiante. Filtrar por `STR_PAIS_AJT ≠ "Colombia"` es válido para identificar estudiantes regulares extranjeros en Fase 4 (Internacionales en La Sabana). | — | — |
 | ~~P2~~ | ✅ **Cerrado en Fase 2 (2026-05-27).** Redefinido: la página Export SNIES expone campos esenciales crudos (`STR_DETALLE_ACTIVIDAD_CAL_AJT`, `STR_COD_PAIS_AJT`, etc.) como insumo para un flujo de homologación externo. No se requiere tabla de homologación dentro del modelo Power BI. El mapeo modelo→SNIES queda documentado en §8.6 y §8.7. | — | — |
 | ~~P3~~ | ✅ **Cerrado en Fase 0 (2026-05-15).** Resuelto trivialmente: `STR_DATOS_CONVENIO_CAL_AJT` ya es binario "Si"/"No" en el origen. No requiere columna calculada ni binarización. | — | — |
+| ~~P4~~ | ✅ **Cerrado (v1.4).** Opción C: se acepta duplicación. La semántica es "¿a qué edades se participa?". Visual usa `[Movilidades]` por rango de edad, título dice "Participaciones". Ver §7.22. | — | — |
+| ~~P5~~ | ✅ **Cerrado (v1.4).** Columna confirmada: `DIM_PERSONA.STR_COD_GENERO_AJT`. | — | — |
+| ~~P6~~ | ✅ **Cerrado (v1.4).** Rangos confirmados: 15–17, 18–25, 26–30, 31–40, 41–50, Mayor 50, Revisar. Ver §7.23. | — | — |
+| ~~P7~~ | ✅ **Cerrado (v1.4).** Filtro: `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"`. No hay departamento/ciudad confiable — restricción de calidad documentada. Top geográfico reemplazado por Top Programas Académicos (La Sabana). Ver §7.24. | — | — |
+
+> **Estado v1.4 (cierre):** no quedan pendientes bloqueantes abiertos.
 
 ### 10.2 Riesgos abiertos
 
 | # | Riesgo | Mitigación |
 |---|---|---|
-| R1 | Datos financieros (`NUM_VALOR_FINAN_*`) existen en el modelo pero no se han explotado en ningún visual hasta hoy. Sin validación previa de calidad/completitud por período. | Auditoría de cobertura por período antes de Fase 6. Identificar períodos con dato vs sin dato para mostrar mensaje explícito en visual. |
+| ~~R1~~ | ✅ **Cerrado (v1.4).** Auditoría de cobertura realizada: máximo 6% (financiación nacional) y 10% (internacional) por período. Multi-moneda confirmada en `STR_MONEDA_FINAN_*` (`"NFD"` = sin dato). | Página Financiación — Exploratoria con salvaguardas obligatorias: disclaimer reforzado, % de cobertura junto a todo valor, segmentación estricta por moneda, marca "Exploratoria" (§7.26, §8.10). |
 | R2 | Nombres internos del modelo (`STR_NOMBRE_ENTIDAD_EXTERNA_CAL_AJT`) vs nombres normativos SNIES (`INSTITUCION_EXTRANJERA`). | Mapeo en capa de visual (renombrado en columna del visual), no en modelo. No rompe DAX existente. |
-| R3 | 15k registros es bajo volumen; refresh 2x/semestre. Riesgo mínimo de performance, pero validar al final. | Test de performance en Fase 0. |
-| R4 | Cobertura Internacional (página existente) podría usar medidas que se modifiquen en Fase 0. | Auditar dependencias antes de tocar medidas existentes. |
+| R3 | 15k registros es bajo volumen; refresh 2x/semestre. Riesgo mínimo de performance, pero validar al final. | Test de performance en Fase 0 (baseline §11.7). Re-medir si una página nueva degrada percepción. |
+| R4 | Cobertura Internacional (página existente) podría usar medidas que se modifiquen en fases futuras. | Auditar dependencias antes de tocar medidas existentes. |
 
 ### 10.3 Decisiones diferidas
 
@@ -709,6 +1023,11 @@ Misma configuración de tabla visual que §8.6.
 - **Sincronización de slicers entre páginas:** se decide en Fase 0, junto con la convención de slicers.
 - **Tooltip pages ranking completo (tops Fase 1):** diferido a post-reunión stakeholder. Validar si Top 5 satisface requerimiento o si se necesita profundidad adicional. Si se requiere → construir 3 tooltip pages ocultas (países, tipos, instituciones) antes de cierre de Fase 5.
 - **Menú Home — entrada Export SNIES:** pendiente. Se conecta cuando se desarrolle la página Home. Debe apuntar a Export SNIES Saliente como aterrizaje por defecto.
+- ~~**(v1.4) Exclusión de eventos nacionales en Balance Presencial/Virtual:**~~ **Cerrada (v1.4).** Balance no se toca. Las páginas Balance Presencial y Virtual siguen mostrando eventos nacionales e internacionales mezclados. Razón: reabrir fases cerradas modifica números ya validados por la DRI. El volumen nacional es presumiblemente bajo. Si en el futuro distorsiona tops internacionales, se agrega filtro `País ≠ Colombia` al panel oculto con cambio mínimo.
+- **(v1.4) Medida `Promedio Duración Días`:** la página de Caracterización muestra un KPI de promedio de duración. No existe como medida documentada en `_Medidas`. Se crea y documenta según §5.2 durante Fase 7.
+- **(v1.4) Menú Home — entradas Caracterización, Movilidad Nacional y Financiación:** agregar cuando se desarrolle Home.
+- **(v1.4) Configuración de slicers en Movilidad Nacional:** validar durante Fase 8 qué filtros se mantienen y cuáles se ajustan para evitar redundancia (en particular el slicer País, tautológico en esa página).
+- **(v1.4) Configuración de slicers en Financiación:** validar durante Fase 6.
 
 ---
 
@@ -809,7 +1128,7 @@ Códigos hex propuestos basados en las páginas existentes. Sujetos a confirmaci
 | Texto principal | `#262626` | Cuerpo de texto, datos en tablas |
 | Rojo alerta | `#C00000` | Botón "Borrar filtros", indicadores negativos |
 | Verde positivo | `#548235` | Indicadores favorables (uso restringido) |
-| Naranja advertencia | `#ED7D31` | Llamados de atención (uso restringido) |
+| Naranja advertencia | `#ED7D31` | Llamados de atención (uso restringido), advertencia de página Exploratoria |
 
 #### 11.3.2 Tamaño de página estándar
 
@@ -882,9 +1201,9 @@ Esta tabla es la referencia normativa para páginas del bloque ANÁLISIS. Las p�
 | Programa Académico | Dropdown | Alfabético ascendente | Sin pre-selección |
 | País | Dropdown | Alfabético ascendente | Sin pre-selección |
 
-**Regla operativa:** cada página analítica nueva se construye copiando el panel de slicers de Resumen tal cual. Si una página necesita un slicer adicional, se agrega al final sin reordenar los existentes.
+**Regla operativa:** cada página analítica nueva se construye copiando el panel de slicers de Resumen tal cual. Si una página necesita un slicer adicional, se agrega al final sin reordenar los existentes (ej. Modalidad en Caracterización, §8.8).
 
-**Sincronización:** activa entre páginas analíticas (Balance Presencial, Virtual, Internacionales). Desactivada con Detalle y SNIES (§11.5.3).
+**Sincronización:** activa entre páginas analíticas. Desactivada con Detalle y SNIES (§11.5.3).
 
 #### 11.5.2 Tabla de slicers — páginas Export SNIES (confirmada Fase 2)
 
@@ -903,9 +1222,11 @@ Panel reducido, slicers dropdown en línea horizontal arriba de la tabla (no en 
 
 | Grupo | Páginas | Sincronizado |
 |---|---|---|
-| Analíticas | Balance Presencial, Virtual, Internacionales | ✅ Entre sí |
+| Analíticas | Balance Presencial, Virtual, Internacionales, Caracterización, Movilidad Nacional, Financiación | ✅ Entre sí |
 | SNIES | Export SNIES Saliente, Export SNIES Entrante | ✅ Entre sí |
 | Detalle | Detalle Movilidad | ❌ Independiente |
+
+> **Nota v1.4:** Caracterización, Movilidad Nacional y Financiación se integran al grupo Analíticas. Modalidad es slicer (no panel oculto) en Caracterización — la sincronización de Modalidad como slicer entre páginas analíticas requiere validación en implementación (Fase 7). La configuración fina de cada página nueva se valida en su fase (Fases 6, 7 y 8).
 
 ### 11.6 Plantilla de página
 
@@ -1067,18 +1388,20 @@ Entregables completados:
 **Entregables:**
 
 1. Página implementada según §8.4.
-2. Filtro de alcance `país ≠ Colombia`.
+2. Filtro de alcance `país ≠ Colombia` (validado — campo país = nacionalidad, P1 cerrado).
 3. KPIs con desglose Regular vs Temporal.
 4. Mapa, evolución, distribución por programa, top instituciones.
+5. Revalidación de `[Movilidades]` con matriculados en alcance: las filas de `FCT_MATRICULADOS` tienen `NUM_NUMERO_MOVILIDAD_CAL = 0` (§4.2, §7.10) — definir en fase si el KPI correcto para regulares es `[Personas]` exclusivamente.
 
 **Definition of Done específico:**
 
 - Pregunta "¿quiénes nos eligen?" respondible desde la página.
 - Distinción visual clara entre matriculados regulares y movilidad temporal.
+- Riesgo de COUNTROWS sobre matriculados (§7.10) resuelto y documentado.
 
-**Dependencias:** Fase 0, **P1 resuelto** (semántica del país en matriculados).
+**Dependencias:** Fase 0. ~~**P1 resuelto**~~ Cerrado: campo país = nacionalidad.
 
-**⚠️ Bloqueante:** no iniciar hasta confirmar P1.
+~~**⚠️ Bloqueante:** no iniciar hasta confirmar P1.~~ **Desbloqueada (v1.4).**
 
 ---
 
@@ -1103,23 +1426,83 @@ Entregables completados:
 
 ### **Fase 6 — Financiación** | branch: `phase-6-financiacion`
 
-**Objetivo:** sumar la 6ª pregunta DRI (financiación). Los datos existen en el modelo pero no se han explotado.
+**Objetivo:** página "Financiación de Movilidad — Exploratoria" según §8.10. Responde pregunta DRI #6 (§3.1) con salvaguardas de integridad. R1 cerrado: cobertura 6%/10% confirmada, multi-moneda documentada (§4.7, §7.26).
 
 **Entregables:**
 
-1. Auditoría previa de cobertura por período (qué % de filas tienen valor financiero).
-2. Visuales financieros en Balance (Presencial + Virtual).
-3. Desglose por financiador nacional / internacional.
-4. Manejo de monedas múltiples (`STR_MONEDA_FINAN_*`).
-5. Indicación visual de períodos sin datos cuando aplique.
+1. ~~Auditoría previa de cobertura por período.~~ **Cerrada (R1):** máx. 6% nacional, 10% internacional.
+2. **Página implementada según §8.10:** 4 KPIs de cobertura + 2 tablas de valor por moneda + 2 gráficos de contexto por conteo.
+3. **4 medidas nuevas de cobertura** (`[Movilidades Financiadas Nacional]`, `[% Cobertura Financiación Nacional]`, `[Movilidades Financiadas Internacional]`, `[% Cobertura Financiación Internacional]`) en `_Medidas/Financiación/`, documentadas según §5.2 con justificación 5-puntos.
+4. **Cuadro de texto de alcance reforzado** con advertencia obligatoria (§8.10).
+5. **Marca "Exploratoria"** en el título de página.
+6. **Validación de configuración de slicers** (§10.3).
 
 **Definition of Done específico:**
 
-- Auditoría de calidad de datos validada con DRI.
-- Conversión de monedas validada con DRI (¿tasa fija? ¿histórica? ¿se reporta en moneda original?).
-- Visuales no muestran $0 engañosos donde realmente no hay dato — usan formato "Sin datos" o equivalente.
+- Estructura §8.10 implementada.
+- **Cero visuales con agregación inter-moneda** (verificación explícita en PR).
+- Todo valor monetario visible acompañado del % de cobertura del contexto.
+- Valores "NFD" excluidos de visuales de valor e incluidos en denominadores de cobertura.
+- Medidas nuevas documentadas según §5.2.
+- R1 cerrado y referenciado.
 
-**Dependencias:** R1 auditado.
+**Dependencias:** Fase 0. ~~Auditoría R1.~~ **R1 cerrado — Fase 6 desbloqueada.**
+
+---
+
+### **Fase 7 — Caracterización Estudiantes en Movilidad** | branch: `phase-7-caracterizacion` *(nueva v1.4)*
+
+**Objetivo:** conformar la página legado de caracterización demográfica a los estándares del plan y extender su alcance para cubrir ambas modalidades (Presencial + Virtual). Responde pregunta DRI #7 (§3.1).
+
+**Entregables:**
+
+1. **Auditoría de página legado:** inventario de medidas, filtros y visuales existentes. Identificar desviaciones contra §5.2, §9, §11.
+2. **Conformación:** reemplazar medidas no portables, agregar cuadro de texto de alcance, documentar filtros con bloque 5-puntos.
+3. **Extensión a ambas modalidades:** agregar Modalidad como slicer de exploración (§7.19). Remover filtro de Modalidad del panel oculto si existe.
+4. ~~**Resolución de P4:**~~ Cerrado. Opción C: se acepta duplicación, semántica "¿a qué edades se participa?" (§7.22).
+5. ~~**Resolución de P5:**~~ Cerrado. Columna confirmada: `DIM_PERSONA.STR_COD_GENERO_AJT`.
+6. ~~**Resolución de P6:**~~ Cerrado. Rangos confirmados: 15–17, 18–25, 26–30, 31–40, 41–50, Mayor 50, Revisar (§7.23). **Implementar columna calculada en PQ + columna de sort** (§4.3).
+7. **Tratamiento de nulos en sexo:** categoría "Sin dato" visible (§7.21).
+8. **Medida nueva:** `[Promedio Duración Días]` documentada según §5.2.
+
+**Definition of Done específico:**
+
+- Página conformada a estándares §5.2, §9, §11.
+- Modalidad funciona como slicer: usuario puede ver Presencial, Virtual, o ambos.
+- Visuales de atributos de persona usan `[Personas]` (§7.20); distribución etaria usa `[Movilidades]` con título "Participaciones por rango de edad" (§7.22).
+- Rangos de edad implementados con columna PQ + sort (§7.23).
+- Nulos de sexo visibles como "Sin dato".
+- Cuadro de texto de alcance presente.
+- Toda medida nueva documentada con bloque `[CASO DE USO]`.
+- ~~P4~~, ~~P5~~, ~~P6~~ cerrados. Sin pendientes bloqueantes.
+
+**Dependencias:** Fase 0 (medidas base). ~~P4~~, ~~P5~~, ~~P6~~ cerrados — **Fase 7 desbloqueada.**
+
+---
+
+### **Fase 8 — Movilidad Nacional** | branch: `phase-8-movilidad-nacional` *(nueva v1.4)*
+
+**Objetivo:** página clon de Balance (§8.2) con alcance Colombia y swap geográfico→programa. Responde pregunta DRI #8 (§3.1).
+
+**Entregables:**
+
+1. ~~**Resolución de P7:**~~ Cerrado. Filtro confirmado: `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"`.
+2. **Página implementada según §8.9.** Clon de Balance con Top Programas Académicos en lugar de Top Países.
+3. **Filtros de alcance en panel oculto:** `STR_PAIS_AJT = "Colombia"` + `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
+4. **Cuadro de texto de alcance visible.**
+5. **Validación de configuración de slicers:** confirmar qué filtros se dejan para evitar redundancia (slicer País tautológico).
+6. **Validación de interacción Top N + jerarquía** en el visual Top Programas (drilldown).
+
+**Definition of Done específico:**
+
+- Pregunta "¿cuál es la movilidad nacional?" respondible desde la página.
+- Cero medidas nuevas (reutilización total de medidas portables).
+- Estructura idéntica a Balance excepto swap Top Países → Top Programas.
+- ~~P7 cerrado.~~ Cerrado.
+- Cuadro de texto de alcance presente.
+- Configuración de slicers validada (sin redundancia).
+
+**Dependencias:** Fase 0 (medidas base). ~~P7~~ cerrado — **Fase 8 desbloqueada.**
 
 ---
 
@@ -1127,17 +1510,22 @@ Entregables completados:
 
 ```
 Fase 0 ──> Fase 1 ──┬──> Fase 2 (cerrada)
-                    ├──> Fase 5
-                    └──> Fase 3
+                    ├──> Fase 5 (siguiente)
+                    ├──> Fase 3
+                    └──> Fase 7 (desbloqueada — P4/P5/P6 cerrados)
 
-Fase 0 ──> Fase 4 (cuando P1 esté resuelto)
+Fase 0 ──> Fase 4 (desbloqueada — P1 cerrado)
 
-Fase 0 + auditoría R1 ──> Fase 6
+Fase 0 ──> Fase 8 (desbloqueada — P7 cerrado)
+
+Fase 0 ──> Fase 6 (desbloqueada — R1 cerrado)
 ```
 
 **Camino crítico:** Fase 0 → Fase 1 → entrega mínima viable que responde preguntas DRI presenciales.
 
-**Siguiente fase recomendada:** Fase 5 (Movilidad Virtual) — clon estructural de Fase 1, mínimo esfuerzo, máximo retorno.
+**Siguiente fase recomendada:** Fase 5 (Movilidad Virtual) — clon estructural de Fase 1, mínimo esfuerzo, máximo retorno. DoD inalterado: cero medidas nuevas.
+
+**Estado v1.4 (cierre):** no quedan fases bloqueadas. Fases 3, 4, 5, 6, 7 y 8 pueden ejecutarse; 5, 7 y 8 son paralelizables entre sí y de bajo riesgo (reutilización de medidas portables).
 
 ---
 
@@ -1158,7 +1546,9 @@ main                    ← producción
 ├── phase-3-detalle-movilidad
 ├── phase-4-internacionales
 ├── phase-5-virtual
-└── phase-6-financiacion
+├── phase-6-financiacion
+├── phase-7-caracterizacion
+└── phase-8-movilidad-nacional
 ```
 
 Una fase = un branch = un PR a `main`.
@@ -1316,6 +1706,7 @@ El `.md` también evoluciona. Convención:
   - v1.1 — ajustes Fase 0
   - v1.2 — ajustes Fase 1
   - v1.3 — Fase 2 cerrada, §7.8 revisado, §8.6/§8.7 nuevos, §11.5.2 nuevo
+  - v1.4 — Ajuste pre-Fase 5: hallazgos 1–7 integrados (§3.1 P7/P8, §4.1.1/§4.3/§4.6 campos demográficos, §7.19–§7.25, §8.8/§8.9, Fases 7–8). **Cierre 2026-06-10:** P1, P4–P7 y R1 cerrados; §4.7 campos financieros; §7.20 precisado (excepción etaria §7.22); §7.26 y §8.10 nuevos (Financiación — Exploratoria); §9 #9 nuevo; conteo final 10 páginas; Fases 3–8 todas desbloqueadas.
 
 ### 14.10 Orden recomendado de ejecución de las fases
 
@@ -1323,9 +1714,11 @@ El `.md` también evoluciona. Convención:
 2. **Fase 1** (Balance Presencial) — ✅ cerrada.
 3. **Fase 2** (Export SNIES) — ✅ cerrada.
 4. **Fase 5** (Movilidad Virtual) — clon estructural de Fase 1, bajo esfuerzo. **Siguiente.**
-5. **Fase 3** (Detalle) — ajuste menor, en cualquier momento después de Fase 0.
-6. **Fase 4** (Internacionales) — desbloqueada al resolver P1.
-7. **Fase 6** (Financiación) — auditoría de datos primero, luego implementación.
+5. **Fase 7** (Caracterización) — conformar legado + extender a ambas modalidades. P4/P5/P6 cerrados — **desbloqueada.** Paralelizable con Fase 5.
+6. **Fase 8** (Movilidad Nacional) — clon de Balance con swap programa. P7 cerrado — **desbloqueada.** Paralelizable.
+7. **Fase 3** (Detalle) — ajuste menor, en cualquier momento después de Fase 0.
+8. **Fase 4** (Internacionales) — P1 cerrado — **desbloqueada.**
+9. **Fase 6** (Financiación) — R1 cerrado — **desbloqueada.** Página exploratoria según §8.10.
 
 ---
 
@@ -1334,14 +1727,19 @@ El `.md` también evoluciona. Convención:
 | Término | Definición |
 |---|---|
 | **Alcance** | Porción del universo de datos que una página analiza. Se controla con filtros de página, no con DAX. |
+| **Caracterización** | Análisis del perfil demográfico (sexo, edad, nivel) de los individuos en movilidad. Métricas: `[Personas]` para atributos de individuo; `[Movilidades]` para distribución etaria (§7.22). |
+| **Conformación** | Proceso de auditar y ajustar una página legado para cumplir los estándares del plan (§5.2, §9, §11). |
 | **Definición intrínseca** | Filtro que es parte permanente de qué mide un KPI. Va en DAX. |
 | **DRI** | Dirección de Relaciones Internacionales. Cliente interno del dashboard. |
 | **Entrante (Inbound)** | Movilidad de extranjeros hacia La Sabana. `STR_CLASIFICACION_MOVILIDAD_CAL_AJT = "Entrante"`. |
 | **Estudiante Regular** | Matriculado en programa académico formal de La Sabana. Origen `FCT_MATRICULADOS`. |
 | **Estudiante Temporal** | Movilidad o visita corta. Origen `FCT_MOVILIDAD_ESTUDIANTE` o `FCT_VISITANTE_EXTRANJERO`. |
 | **Grano** | Nivel de detalle de una fila en la FCT. Ver §4.2. |
-| **Modalidad** | Presencial o Virtual. Derivada de `STR_DETALLE_ACTIVIDAD_CAL_AJT`. |
+| **Modalidad** | Presencial o Virtual. Derivada de `STR_DETALLE_ACTIVIDAD_CAL_AJT`. Columna materializada: `FCT_Movilidad_Estudiantil[Modalidad]`. |
 | **Movilidad** | Evento de intercambio académico. Métrica: `COUNTROWS(FCT_Movilidad_Estudiantil)`. |
+| **Movilidad Nacional** | Movilidad estudiantil con destino/origen dentro de Colombia. Filtro: `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"`. |
+| **NFD** | Valor en `STR_MONEDA_FINAN_*` que indica "sin dato de financiación". Se excluye de visuales de valor; define el denominador inverso de las medidas de cobertura (§7.26). |
+| **Página Exploratoria** | Página construida sobre datos con cobertura parcial confirmada. Lleva advertencia obligatoria visible y no respalda decisiones operativas ni presupuestales (§7.26, §8.10). |
 | **Persona** | Individuo único. Métrica: `DISTINCTCOUNT(STR_PERSONA_ID_NK)`. |
 | **Portabilidad** | Propiedad de una medida que funciona en múltiples alcances sin modificación. |
 | **Saliente (Outbound)** | Movilidad de estudiantes de La Sabana hacia el exterior. |
