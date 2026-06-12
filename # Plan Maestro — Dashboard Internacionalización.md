@@ -11,9 +11,9 @@
 | Arquitecto BI | [tu nombre] |
 | Plataforma | Power BI (formato `.pbip`) |
 | Versionado | Git |
-| Versión del documento | v1.4 |
-| Última actualización | 2026-06-10 |
-| Estado | v1.4 cerrada · P1, P4–P7 y R1 cerrados · Fases 3–8 desbloqueadas · siguiente: Fase 5 |
+| Versión del documento | v1.5 |
+| Última actualización | 2026-06-12 |
+| Estado | v1.5 cerrada · Fase 7 cerrada · siguiente: Fase 8 |
 
 ---
 
@@ -160,7 +160,8 @@ NUM_DIM_PERSONA_SK
 | Dirección | `STR_CLASIFICACION_MOVILIDAD_CAL_AJT` → "Saliente" (OUTBOUND) / "Entrante" (INBOUND) |
 | Tipo de Estudiante | "Regular" si origen = `FCT_MATRICULADOS`, "Temporal" en otro caso |
 | Modalidad | `FCT_Movilidad_Estudiantil[Modalidad]` — columna materializada en PQ. "Virtual" si `STR_DETALLE_ACTIVIDAD_CAL_AJT` contiene "virtual", "Presencial" en otro caso. Confirmada v1.4. |
-| Rango de Edad | Columna calculada en PQ derivada de `NUM_EDAD_CAL_AJT`, buckets de §7.23 + columna auxiliar de sort. **A implementar en Fase 7.** |
+| Rango de Edad | `FCT_Movilidad_Estudiantil[Rango de edades]` — columna calculada en PQ derivada de `NUM_EDAD_CAL_AJT`, 7 buckets de §7.23. Columna auxiliar de sort: `NUM_RANGO_EDAD_SORT_CAL` (entero 1–7). Implementada en Fase 7. Nombre de columna no sigue convención `STR_..._CAL` — desvío documentado en §7.27. |
+| Sexo (limpieza) | `DIM_PERSONA[STR_COD_GENERO_AJT]` — valores "U", null y "" transformados a "Sin dato" en PQ. Implementado en Fase 7 (§7.21). |
 
 ### 4.4 Volumen y actualización
 
@@ -183,10 +184,12 @@ NUM_DIM_PERSONA_SK
 
 | Campo | Ubicación | Tipo | Nota |
 |---|---|---|---|
-| Sexo | `DIM_PERSONA.STR_COD_GENERO_AJT` | Categórico | ~17 registros sin valor asignado detectados en mockup stakeholder (1.228 personas vs 1.211 con sexo). Nombre confirmado v1.4. |
+| Sexo | `DIM_PERSONA.STR_COD_GENERO_AJT` | Categórico | Valores post-PQ: "F", "M", "Sin dato". Originales en extracción: "F", "M", "U", null. ~140 registros como "Sin dato" en universo completo (1,5% de 9.311 personas). Cifra anterior (~17) era solo contexto virtual del mockup. Nombre confirmado v1.4; limpieza implementada v1.5. |
 | `NUM_EDAD_CAL_AJT` | `FCT_Movilidad_Estudiantil` | Entero | Edad al momento del evento. Ver §4.1.1 para implicación de grano. |
 
 **Tratamiento de nulos en sexo:** los registros sin valor se muestran como categoría **"Sin dato"** en visuales demográficos. Justificación: ocultar registros sin sexo falsea el total de personas. Transparencia sobre completitud > limpieza cosmética. Ver §7.21.
+
+**(v1.5)** Adicionalmente, existe al menos 1 registro con FK huérfana: persona presente en la FCT sin fila correspondiente en `DIM_PERSONA`. El motor VertiPaq genera BLANK en runtime para estos casos. Capturado en DAX (`_Personas Sin Dato` usa `ISBLANK`), no en PQ — la fila no existe en la dimensión para ser transformada.
 
 ### 4.7 Campos financieros disponibles (agregado v1.4)
 
@@ -297,14 +300,17 @@ Ningún visual existe por estética. Cada visual responde una pregunta concreta 
 ### 6.1 Los tres tipos de filtros
 
 **1. Definición de negocio** — el filtro *es* parte de qué mide la métrica.
+
 - Test: si la página se replicara con otro alcance, esta lógica seguiría aplicando idéntica.
 - Capa correcta: **DAX dentro de la medida**.
 
 **2. Alcance del reporte/página** — el filtro define qué porción del universo mira esta vista.
+
 - Test: si mañana hay que ver el mismo KPI con otro alcance, no debería requerir una medida nueva.
 - Capa correcta: **panel de filtros de página** (bloqueado y oculto), con cuadro de texto visible.
 
 **3. Exploración del usuario** — existe para que el usuario corte y compare.
+
 - Capa correcta: **slicer** en el lienzo.
 
 ### 6.2 Test de portabilidad (obligatorio antes de crear una medida)
@@ -604,6 +610,32 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Test de portabilidad:** medidas de cobertura portables. Si mañana se audita y mejora la captura del dato financiero, la página no cambia — solo mejoran sus números.
 - ~~**Riesgo asociado:** R1 (§10.2).~~ **R1 cerrado.**
 
+### 7.27 Decisión: columna PQ `Rango de edades` sin convención `STR_..._CAL` (v1.5)
+
+- **Decisión:** la columna de rango de edad en la FCT se nombra `Rango de edades` en vez de `STR_RANGO_EDAD_CAL`.
+- **Tipo:** desvío de convención §11.1.5.
+- **Por qué:** el equipo estableció una distinción intencional entre columnas provenientes de la extracción SQL (prefijo `STR_`/`NUM_` + sufijo `_CAL`/`_AJT`) y columnas construidas en Power Query (nombre legible sin prefijos). La columna auxiliar de sort sí mantiene la convención (`NUM_RANGO_EDAD_SORT_CAL`) porque es técnica y no visible al usuario.
+- **Trade-off aceptado:** inconsistencia con las demás columnas del modelo. El próximo mantenedor debe conocer esta distinción. Documentada aquí para evitar correcciones accidentales.
+- **Alcance:** aplica por ahora solo a esta columna. Si se adopta como patrón general para futuras columnas PQ, documentar como regla en §11.1.5.
+
+### 7.28 Decisión: pictograma SVG nativo para distribución por sexo (v1.5)
+
+- **Decisión:** la distribución por sexo se implementa como composición de 3 New Cards con imágenes SVG generadas por medidas DAX, no como Clustered Bar ni como visual custom de marketplace.
+- **Tipo:** visualización + patrón técnico.
+- **Por qué:** las medidas SVG generan siluetas con relleno proporcional (gradiente lineal) al porcentaje de cada categoría. Cada Card muestra ícono + conteo + porcentaje. El resultado es 100% nativo (sin dependencia de marketplace), reactivo a todos los slicers de la página, y con render predecible (baseline §11.7).
+- **Implementación:** 9 medidas auxiliares ocultas en `_Medidas/Personas/` (3 conteos, 3 porcentajes, 3 SVG). Los filtros de sexo van hardcodeados en DAX porque cada medida SVG genera un ícono distinto — no hay forma de parametrizar el path SVG desde el contexto de filtro. Esto es excepción aceptada a §9 #1 (medidas que difieren por filtro): aquí la diferencia no es solo de filtro sino de artefacto visual (distinto SVG path por categoría).
+- **Trade-off aceptado:** 9 medidas auxiliares para un solo visual. Complejidad de mantenimiento si los valores de sexo cambian en el origen (actualmente F/M/U). Mitigado porque son medidas triviales (<1ms VertiPaq) y ocultas.
+- **Colores SVG:** Femenino `#BDD7EE`, Masculino `#2E5597`, Sin Dato `#595959` — todos de §11.3.1.
+- **Patrón reutilizable:** si otra página necesita pictograma proporcional, replicar estructura (medidas de conteo + porcentaje + SVG con gradiente).
+
+### 7.29 Decisión: subtítulos dinámicos específicos por página cuando difieren en slicers (v1.5)
+
+- **Decisión:** la página Caracterización usa una medida de subtítulo propia (`_Subtítulo Caracterización`) en vez de reutilizar `Subtitulo Contexto General` de las páginas Balance/Virtual.
+- **Tipo:** patrón técnico.
+- **Por qué:** Caracterización tiene Modalidad como slicer exclusivo (§7.19). Modificar la medida compartida para agregar detección de Modalidad rompe el comportamiento de páginas cerradas: en Balance Presencial, `Modalidad` está filtrada a nivel de panel oculto, entonces `ISFILTERED` retornaría TRUE siempre y el estado "Panorama General de Movilidades" (sin filtros) dejaría de aparecer.
+- **Trade-off aceptado:** medida no compartida — si se agregan filtros nuevos a las páginas analíticas, se actualizan dos medidas en vez de una.
+- **Regla derivada:** cuando una página tiene slicers exclusivos que no existen en las demás del grupo Analíticas, usar medida de subtítulo propia. Si el slicer se generaliza a todas las páginas, migrar a la medida compartida.
+
 ---
 
 ## 8. Arquitectura de páginas
@@ -667,12 +699,14 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 ```
 
 **Fila 1 — KPIs (65px):**
+
 - 3 tarjetas individuales (new Card visual).
 - Movilidades y Personas a ~400px, % Convenio a ~250px.
 - Font: 36pt bold primarias, 28pt bold secundaria.
 - Color valor: `#1F3864` primarias, `#595959` % Convenio.
 
 **Fila 2 — Evolución temporal (240px):**
+
 - Line Chart ancho completo.
 - Eje X: período académico categórico (`YYYY-N`), 9pt rotación 45°.
 - Eje Y: [Movilidades].
@@ -682,6 +716,7 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 - Gridlines horizontales activas en `#F2F2F2`.
 
 **Fila 3 — Tops (280px):**
+
 - 3 Clustered Bar Charts horizontales (no 6 visuales — ver §7.13).
 - Dimensión Dirección incorporada como serie interna del visual.
 - Top 5 por [Movilidades], descendente, filtro Top N nativo (ver §7.14).
@@ -691,6 +726,7 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 - Sin categoría "Otros" agrupada.
 
 **Elementos transversales:**
+
 - Paleta E/S consistente: `#2E5597` Entrante, `#BDD7EE` Saliente.
 - Subtítulo dinámico heredado de plantilla.
 - Cuadro de texto de alcance visible bajo subtítulo.
@@ -765,6 +801,7 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 | 18 | Moneda Internacional | `STR_MONEDA_FINAN_INTERNACIONAL_CAL_AJT` | FCT |
 
 **Configuración tabla visual:**
+
 - Tipo: Table (no Matrix). Sin totales, sin subtotales.
 - Tamaño fuente: 10pt cuerpo, 11pt encabezados.
 - Alternating rows: `#F2F2F2` / blanco.
@@ -864,12 +901,14 @@ Layout sobre canvas 1920×1080 (área útil descontando panel lateral de slicers
 | Evolución temporal | ❌ | Ya en Balance (§8.2), Virtual (§8.3), Nacional (§8.9). No aporta pregunta nueva acá. |
 
 **Elementos transversales:**
+
 - Paleta E/S consistente: `#2E5597` Entrante, `#BDD7EE` Saliente.
 - Subtítulo dinámico heredado de plantilla.
 - Cuadro de texto de alcance visible bajo subtítulo.
 - Slicers: panel lateral estándar (§11.5.1) + **Modalidad** como slicer adicional al final del panel.
 
 **Acciones de conformación (Fase 7):**
+
 1. Auditar medidas existentes contra §5.2, §9, §11.
 2. Reemplazar medidas no portables si existen.
 3. Agregar Modalidad como slicer de exploración.
@@ -877,6 +916,34 @@ Layout sobre canvas 1920×1080 (área útil descontando panel lateral de slicers
 5. Remover filtro de Modalidad del panel oculto (si existe) y delegar al slicer.
 6. ~~Definir rangos de edad con DRI (P6).~~ Cerrado: 7 buckets confirmados (§7.23). Implementar columna PQ + sort.
 7. ~~Resolver desambiguación edad-persona (§7.22, P4).~~ Cerrado: Opción C, se acepta duplicación.
+
+**✅ Fase 7 cerrada — 2026-06-12.**
+
+Implementación completada. Página reconstruida de cero — la versión legado se descartó por filtros de alcance incorrectos heredados (Modalidad fija a Presencial, país ≠ Colombia, tipo período = Regular) que no correspondían al propósito demográfico.
+
+**Cambios respecto al diseño v1.4:**
+
+- Visual de sexo: implementado como pictograma SVG nativo (§7.28), no Clustered Bar. 3 New Cards con siluetas proporcionales al % por categoría (F, M, Sin dato).
+- Visual de edad: implementado como Clustered Column Chart vertical (histograma), no Clustered Bar horizontal. Preserva el orden lógico de rangos y diferencia visualmente de los demás gráficos de la página.
+- Subtítulo dinámico: medida propia `_Subtítulo Caracterización` (§7.29). Default sin filtros: "Perfil Demográfico General".
+
+**Medidas creadas en Fase 7:**
+
+| Medida | Carpeta | Oculta | Nota |
+|---|---|---|---|
+| `Promedio Duración Días` | `_Medidas/Movilidad/` | No | KPI de Fila 1. |
+| `_Personas Femenino` | `_Medidas/Personas/` | Sí | Conteo filtrado para pictograma. |
+| `_Personas Masculino` | `_Medidas/Personas/` | Sí | Conteo filtrado para pictograma. |
+| `_Personas Sin Dato` | `_Medidas/Personas/` | Sí | Captura "Sin dato" + BLANK (FK huérfana). |
+| `_% Femenino` | `_Medidas/Personas/` | Sí | Porcentaje para gradiente SVG. |
+| `_% Masculino` | `_Medidas/Personas/` | Sí | Porcentaje para gradiente SVG. |
+| `_% Sin Dato` | `_Medidas/Personas/` | Sí | Porcentaje para gradiente SVG. |
+| `_SVG Femenino` | `_Medidas/Personas/` | Sí | Data URI con path SVG. Data category = Image URL. |
+| `_SVG Masculino` | `_Medidas/Personas/` | Sí | Data URI con path SVG. Data category = Image URL. |
+| `_SVG Sin Dato` | `_Medidas/Personas/` | Sí | Data URI con path SVG. Data category = Image URL. |
+| `_Subtítulo Caracterización` | `_Medidas/Auxiliares/` | Sí | Subtítulo dinámico con Modalidad (§7.29). |
+
+**Total medidas Fase 7:** 11 (1 visible + 10 auxiliares ocultas).
 
 ### 8.9 Movilidad Nacional *(nueva — v1.4, clon de Balance con swap geográfico→programa)*
 
@@ -1024,10 +1091,11 @@ Layout sobre canvas 1920×1080 (área útil descontando panel lateral de slicers
 - **Tooltip pages ranking completo (tops Fase 1):** diferido a post-reunión stakeholder. Validar si Top 5 satisface requerimiento o si se necesita profundidad adicional. Si se requiere → construir 3 tooltip pages ocultas (países, tipos, instituciones) antes de cierre de Fase 5.
 - **Menú Home — entrada Export SNIES:** pendiente. Se conecta cuando se desarrolle la página Home. Debe apuntar a Export SNIES Saliente como aterrizaje por defecto.
 - ~~**(v1.4) Exclusión de eventos nacionales en Balance Presencial/Virtual:**~~ **Cerrada (v1.4).** Balance no se toca. Las páginas Balance Presencial y Virtual siguen mostrando eventos nacionales e internacionales mezclados. Razón: reabrir fases cerradas modifica números ya validados por la DRI. El volumen nacional es presumiblemente bajo. Si en el futuro distorsiona tops internacionales, se agrega filtro `País ≠ Colombia` al panel oculto con cambio mínimo.
-- **(v1.4) Medida `Promedio Duración Días`:** la página de Caracterización muestra un KPI de promedio de duración. No existe como medida documentada en `_Medidas`. Se crea y documenta según §5.2 durante Fase 7.
+- ~~**(v1.4) Medida `Promedio Duración Días`:**~~ **Cerrada (v1.5).** Creada en `_Medidas/Base/` como `AVERAGE(NUM_DURACION_DIAS_CAL_AJT)`, documentada según §5.2. Formato: entero, 0 decimales.
 - **(v1.4) Menú Home — entradas Caracterización, Movilidad Nacional y Financiación:** agregar cuando se desarrolle Home.
 - **(v1.4) Configuración de slicers en Movilidad Nacional:** validar durante Fase 8 qué filtros se mantienen y cuáles se ajustan para evitar redundancia (en particular el slicer País, tautológico en esa página).
 - **(v1.4) Configuración de slicers en Financiación:** validar durante Fase 6.
+- **(v1.5) FK huérfana en DIM_PERSONA:** al menos 1 persona en la FCT no tiene registro en DIM_PERSONA. Impacto actual mínimo (capturado en DAX como BLANK en _Personas Sin Dato). Si el volumen crece, investigar en el ETL.
 
 ---
 
@@ -1244,6 +1312,7 @@ Medición: Performance Analyzer en Power BI Desktop. Dataset: ~15.000 filas en F
 | Warm cache (último refresh con filtros aplicados) | 515 ms | Tendencia mov vs personas (507 ms, render de lineChart) | SubTítulo (24 ms) |
 
 **Conclusiones:**
+
 - DAX queries todas <25 ms. Motor VertiPaq sin estrés.
 - Cuello de botella en render de visuales custom (cardVisual, azureMap) y lineChart con múltiples series. No en cálculo.
 - Modelo en estrella sano para el volumen actual.
@@ -1301,6 +1370,7 @@ Cada fase es **un entregable autocontenido** versionable en git. Una fase no se 
 **✅ Fase 0 cerrada — 2026-05-15.**
 
 Entregables completados:
+
 - Tabla `_Medidas` con displayFolders (`Movilidad/`, `Personas/`, `Convenio/`, `Auxiliares/`, `Notas/`).
 - Medidas portables `[Movilidades]`, `[Personas]`, `[% Bajo Convenio]` documentadas según §5.2.
 - Eliminadas medidas hardcodeadas (`Total Movilidades`, `Total Personas`, `Movilidades Presenciales Internacional`, `Personas Presenciales Internacional`).
@@ -1319,6 +1389,7 @@ Entregables completados:
 **✅ Fase 1 cerrada — 2026-05-22.**
 
 Entregables completados:
+
 - Página "Balance de Movilidad Presencial" implementada según §8.2 (estructura final).
 - Filtros de alcance en panel oculto: `Modalidad = "Presencial"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
 - 3 KPIs (Movilidades, Personas, % Bajo Convenio) sin medidas nuevas — reutilización completa de medidas portables de Fase 0.
@@ -1343,6 +1414,7 @@ Entregables completados:
 **✅ Fase 2 cerrada — 2026-05-27.**
 
 Entregables completados:
+
 - Dos páginas independientes: "Export SNIES Saliente" (18 columnas) y "Export SNIES Entrante" (22 columnas). Desvío justificado de §7.8 original (ver §7.8 revisado).
 - Botones de alternancia tipo tab (Page Navigation) entre las dos páginas.
 - Filtros de alcance en panel oculto: tabla origen (Movilidad + Visitantes), dirección fija por página, año y semestre fijados al período a reportar (ver §7.17).
@@ -1409,18 +1481,18 @@ Entregables completados:
 
 **Objetivo:** clonar Balance con alcance virtual.
 
-**Entregables:**
+**✅ Fase 5 cerrada — 2026-06-11.**
 
-1. Página implementada según §8.3.
-2. Filtro de alcance `Modalidad = "Virtual"`.
-3. Misma estructura visual que Balance Presencial.
+Entregables completados:
 
-**Definition of Done específico:**
+- Página "Movilidad Virtual" implementada según §8.3 (clon estructural de §8.2).
+- Filtro de alcance en panel oculto: `Modalidad = "Virtual"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
+- Misma estructura visual que Balance Presencial: 3 KPIs + line chart E/S + 3 tops con Dirección como serie interna.
+- Cuadro de texto de alcance visible.
+- Cero medidas nuevas — reutilización completa de medidas portables de Fase 0.
+- Sync slicers verificado con grupo Analíticas.
 
-- Cero medidas nuevas. Solo reutilización de Fase 1.
-- Estructura idéntica a Balance Presencial.
-
-**Dependencias:** Fase 1 (es clon estructural).
+**Dependencias:** Fase 1 (clon estructural).
 
 ---
 
@@ -1454,29 +1526,23 @@ Entregables completados:
 
 **Objetivo:** conformar la página legado de caracterización demográfica a los estándares del plan y extender su alcance para cubrir ambas modalidades (Presencial + Virtual). Responde pregunta DRI #7 (§3.1).
 
-**Entregables:**
+**✅ Fase 7 cerrada — 2026-06-12.**
 
-1. **Auditoría de página legado:** inventario de medidas, filtros y visuales existentes. Identificar desviaciones contra §5.2, §9, §11.
-2. **Conformación:** reemplazar medidas no portables, agregar cuadro de texto de alcance, documentar filtros con bloque 5-puntos.
-3. **Extensión a ambas modalidades:** agregar Modalidad como slicer de exploración (§7.19). Remover filtro de Modalidad del panel oculto si existe.
-4. ~~**Resolución de P4:**~~ Cerrado. Opción C: se acepta duplicación, semántica "¿a qué edades se participa?" (§7.22).
-5. ~~**Resolución de P5:**~~ Cerrado. Columna confirmada: `DIM_PERSONA.STR_COD_GENERO_AJT`.
-6. ~~**Resolución de P6:**~~ Cerrado. Rangos confirmados: 15–17, 18–25, 26–30, 31–40, 41–50, Mayor 50, Revisar (§7.23). **Implementar columna calculada en PQ + columna de sort** (§4.3).
-7. **Tratamiento de nulos en sexo:** categoría "Sin dato" visible (§7.21).
-8. **Medida nueva:** `[Promedio Duración Días]` documentada según §5.2.
+Entregables completados:
 
-**Definition of Done específico:**
+- Página "Caracterización Estudiantes en Movilidad" reconstruida de cero contra §8.8. Versión legado descartada por filtros incorrectos.
+- Columnas PQ en FCT: `Rango de edades` (7 buckets §7.23) + `NUM_RANGO_EDAD_SORT_CAL` (sort). Sort By Column configurado.
+- Limpieza PQ en DIM_PERSONA: "U", null y "" transformados a "Sin dato" en `STR_COD_GENERO_AJT`.
+- Filtro de alcance en panel oculto: `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`. Sin filtro de Modalidad (es slicer §7.19).
+- Modalidad como slicer de exploración — no sincronizado con otras páginas (Opción A).
+- Pictograma SVG nativo para distribución por sexo (§7.28): 3 New Cards con siluetas proporcionales, conteo y porcentaje. Incluye categoría "Sin dato" (§7.21).
+- Histograma de edad como Clustered Column Chart vertical con `[Movilidades]` (§7.22). Título "Participaciones por rango de edad".
+- 11 medidas: 1 visible (`Promedio Duración Días`) + 10 auxiliares ocultas (pictograma + subtítulo).
+- Cuadro de texto de alcance visible.
+- Subtítulo dinámico propio con detección de Modalidad (§7.29).
+- Cero medidas portables nuevas — `[Movilidades]`, `[Personas]` reutilizadas.
 
-- Página conformada a estándares §5.2, §9, §11.
-- Modalidad funciona como slicer: usuario puede ver Presencial, Virtual, o ambos.
-- Visuales de atributos de persona usan `[Personas]` (§7.20); distribución etaria usa `[Movilidades]` con título "Participaciones por rango de edad" (§7.22).
-- Rangos de edad implementados con columna PQ + sort (§7.23).
-- Nulos de sexo visibles como "Sin dato".
-- Cuadro de texto de alcance presente.
-- Toda medida nueva documentada con bloque `[CASO DE USO]`.
-- ~~P4~~, ~~P5~~, ~~P6~~ cerrados. Sin pendientes bloqueantes.
-
-**Dependencias:** Fase 0 (medidas base). ~~P4~~, ~~P5~~, ~~P6~~ cerrados — **Fase 7 desbloqueada.**
+**Dependencias:** Fase 0 (medidas base).
 
 ---
 
@@ -1510,9 +1576,9 @@ Entregables completados:
 
 ```
 Fase 0 ──> Fase 1 ──┬──> Fase 2 (cerrada)
-                    ├──> Fase 5 (siguiente)
+                    ├──> Fase 5 (cerrada)
                     ├──> Fase 3
-                    └──> Fase 7 (desbloqueada — P4/P5/P6 cerrados)
+                    └──> Fase 7 (cerrada)
 
 Fase 0 ──> Fase 4 (desbloqueada — P1 cerrado)
 
@@ -1545,9 +1611,9 @@ main                    ← producción
 ├── phase-2-export-snies        ✅ merged
 ├── phase-3-detalle-movilidad
 ├── phase-4-internacionales
-├── phase-5-virtual
+├── phase-5-virtual             ✅ merged 
 ├── phase-6-financiacion
-├── phase-7-caracterizacion
+├── phase-7-caracterizacion     ✅ merged
 └── phase-8-movilidad-nacional
 ```
 
@@ -1656,10 +1722,12 @@ Empezamos por [punto específico].
 Algunas fases pueden requerir varias sesiones (Fase 1 — Balance es candidata). En ese caso:
 
 **Opción A — Una sola conversación larga (preferida si la fase cabe en ~30 mensajes):**
+
 - Mantener la conversación abierta hasta cerrar DoD.
 - Cierre limpio al final.
 
 **Opción B — Múltiples sesiones (si la fase es muy grande):**
+
 - Sub-sesiones temáticas dentro de la fase: ej. "Fase 1.A — Medidas DAX", "Fase 1.B — Layout visual", "Fase 1.C — Validación".
 - Cada sub-sesión termina con commit, sin PR.
 - PR se abre al cierre de la fase completa.
@@ -1707,15 +1775,16 @@ El `.md` también evoluciona. Convención:
   - v1.2 — ajustes Fase 1
   - v1.3 — Fase 2 cerrada, §7.8 revisado, §8.6/§8.7 nuevos, §11.5.2 nuevo
   - v1.4 — Ajuste pre-Fase 5: hallazgos 1–7 integrados (§3.1 P7/P8, §4.1.1/§4.3/§4.6 campos demográficos, §7.19–§7.25, §8.8/§8.9, Fases 7–8). **Cierre 2026-06-10:** P1, P4–P7 y R1 cerrados; §4.7 campos financieros; §7.20 precisado (excepción etaria §7.22); §7.26 y §8.10 nuevos (Financiación — Exploratoria); §9 #9 nuevo; conteo final 10 páginas; Fases 3–8 todas desbloqueadas.
+  - v1.5 — Fase 7 cerrada. §4.3/§4.6 actualizados (columnas PQ implementadas, conteo Sin dato corregido). §7.27–§7.29 nuevos (naming desvío, pictograma SVG, subtítulo por página). §8.8 con detalle de implementación final. §10.3 actualizado (Promedio Duración cerrado, nuevos diferidos). 11 medidas creadas.
 
 ### 14.10 Orden recomendado de ejecución de las fases
 
 1. **Fase 0** (foundation) — ✅ cerrada.
 2. **Fase 1** (Balance Presencial) — ✅ cerrada.
 3. **Fase 2** (Export SNIES) — ✅ cerrada.
-4. **Fase 5** (Movilidad Virtual) — clon estructural de Fase 1, bajo esfuerzo. **Siguiente.**
-5. **Fase 7** (Caracterización) — conformar legado + extender a ambas modalidades. P4/P5/P6 cerrados — **desbloqueada.** Paralelizable con Fase 5.
-6. **Fase 8** (Movilidad Nacional) — clon de Balance con swap programa. P7 cerrado — **desbloqueada.** Paralelizable.
+4. **Fase 5** (Movilidad Virtual) — ✅ cerrada.
+5. **Fase 7** (Caracterización) — ✅ cerrada.
+6. **Fase 8** (Movilidad Nacional) — clon de Balance con swap programa. P7 cerrado — **desbloqueada. Siguiente.**
 7. **Fase 3** (Detalle) — ajuste menor, en cualquier momento después de Fase 0.
 8. **Fase 4** (Internacionales) — P1 cerrado — **desbloqueada.**
 9. **Fase 6** (Financiación) — R1 cerrado — **desbloqueada.** Página exploratoria según §8.10.
