@@ -11,9 +11,9 @@
 | Arquitecto BI | [tu nombre] |
 | Plataforma | Power BI (formato `.pbip`) |
 | Versionado | Git |
-| Versión del documento | v1.5 |
+| Versión del documento | v1.6 |
 | Última actualización | 2026-06-12 |
-| Estado | v1.5 cerrada · Fase 7 cerrada · siguiente: Fase 8 |
+| Estado | v1.6 en curso · Fase 8 en ejecución (decisiones de diseño cerradas, implementación pendiente) |
 
 ---
 
@@ -475,13 +475,21 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Trade-off aceptado:** visual más denso. Mitigado con Top N (§7.14).
 - **Test de portabilidad:** mismo patrón replicable en Fase 5 (Movilidad Virtual) y Fase 8 (Movilidad Nacional).
 
-### 7.14 Decisión: Top 5 con filtro nativo + tooltip pages diferidas
+### 7.14 Decisión: ranking completo con scroll vertical (revisada 2026-06-12, Fase 8)
 
-- **Decisión:** los 3 tops muestran Top 5 por [Movilidades] con filtro Top N nativo de Power BI, descendente. Tooltip pages con ranking completo diferidas a post-reunión stakeholder.
-- **Tipo:** UX / densidad informativa.
-- **Por qué:** Top 5 es suficiente para lectura ejecutiva. La profundidad adicional (tooltip pages con ranking extendido) se valida con stakeholder antes de construir para no sobreconstruir. Sin categoría "Otros" agrupada — diluye lectura ejecutiva.
-- **Trade-off aceptado:** acceso al ranking completo no disponible desde esta página hasta validación con stakeholder.
-- **Test de portabilidad:** patrón replicable en Fase 5.
+> Reemplaza la decisión original "Top 5 con filtro nativo + tooltip pages diferidas".
+
+- **Decisión:** los 3 tops muestran el **ranking completo** en Clustered Bar con scroll vertical, descendente por [Movilidades]. **Sin filtro Top N nativo.**
+- **Tipo:** UX / densidad informativa. Revisión validada por stakeholder.
+- **Por qué:** el stakeholder revisó el Top 5 y validó que el acceso al ranking completo sin saltar de página es preferible. El scroll preserva la lectura ejecutiva: las primeras ~5 barras dominan el primer vistazo sin requerir interacción.
+- **Condición visual obligatoria:** altura de barra fija (no auto-fit) para que el corte visible inicial mantenga densidad comparable al Top 5 original. Orden descendente preservado.
+- **Aplicación:** Balance Presencial (§8.2), Movilidad Virtual (§8.3), Movilidad Nacional (§8.9). Implementado retroactivamente en las dos primeras (2026-06).
+- **Consecuencias:**
+  - Las tooltip pages de ranking completo (§10.3) quedan **obsoletas** — diferido eliminado.
+  - La validación "interacción Top N + jerarquía" de Fase 8 (§8.9, §12) **deja de aplicar**: sin Top N no hay conflicto con el drilldown UA→Programa.
+- **Verificación pendiente (Fase 8):** confirmar en los 3 lienzos que el filtro Top N fue **removido** del panel del visual, no solo ampliado a N grande. Un Top N residual interferiría con el drilldown jerárquico en Nacional.
+- **Trade-off aceptado:** scroll como interacción adicional en lectura ejecutiva. Mitigado por orden descendente + corte visible inicial. Sin categoría "Otros" agrupada (sin cambio).
+- **Test de portabilidad:** mismo patrón en las 3 páginas con tops.
 
 ### 7.15 Decisión: slicers de exploración en panel lateral (no en lienzo horizontal)
 
@@ -636,6 +644,26 @@ Excepciones legítimas: medidas que sí codifican definición intrínseca (no co
 - **Trade-off aceptado:** medida no compartida — si se agregan filtros nuevos a las páginas analíticas, se actualizan dos medidas en vez de una.
 - **Regla derivada:** cuando una página tiene slicers exclusivos que no existen en las demás del grupo Analíticas, usar medida de subtítulo propia. Si el slicer se generaliza a todas las páginas, migrar a la medida compartida.
 
+### 7.30 Decisión: exclusión del slicer País en Movilidad Nacional (v1.6, Fase 8)
+
+- **Decisión:** se remueve el slicer País del panel lateral de Movilidad Nacional y se excluye la página del grupo de sincronización de ese slicer (en panel Sync Slicers: casillas **sync y visible desmarcadas** para esta página).
+- **Tipo de filtro:** exploración (removida por tautología).
+- **Capa elegida:** N/A — eliminación.
+- **Por qué acá y no en otra capa:** el alcance de la página fija `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"` en panel oculto. Un slicer sobre la misma columna ofrece un solo valor posible (ruido) y, peor, la **sincronización** con páginas analíticas produce intersección vacía: si el usuario filtra `País = "España"` en Balance y la sync propaga, toda la página Nacional queda en blanco.
+- **Implementación crítica:** borrar el visual slicer del lienzo **no basta** — la casilla de sync puede quedar activa y el filtro se propaga sin slicer visible. Desmarcar ambas casillas en el panel Sync Slicers es obligatorio.
+- **Test obligatorio:** filtrar `País = "España"` en Balance → navegar a Nacional → los KPIs deben mostrar los mismos valores que sin filtro. Página en blanco = sync residual activa.
+- **Trade-off aceptado:** desvío de la regla "copiar panel completo" de §11.5.1. El resto del panel se mantiene intacto y en orden estándar.
+- **Test de portabilidad:** N/A. Si la página se generalizara a alcance mixto, se restituye el slicer y la sync sin tocar medidas.
+
+### 7.31 Decisión: cuadro de texto de alcance compacto en Movilidad Nacional (v1.6, Fase 8)
+
+- **Decisión:** el cuadro de texto de alcance se mantiene en página (no negociable, §5.2) en **formato compacto de una línea**: 9pt, color `#595959`, bajo el subtítulo dinámico. Texto: *"Movilidad temporal dentro de Colombia · Incluye modalidad presencial y virtual · Excluye internacional y matriculados regulares"*.
+- **Tipo:** UX / documentación de alcance.
+- **Por qué se rechaza moverlo a una página de definiciones:** el filtro de alcance vive en panel oculto — el cuadro es la **única** señal visible del universo analizado. Las páginas viajan como screenshots a presentaciones directivas; un pantallazo de Nacional sin texto de alcance es indistinguible de Balance. La documentación de alcance debe ser atómica con la página, no referencial.
+- **Alternativa complementaria (no sustitutiva):** página "Definiciones y Metodología" propuesta como diferido en §10.3. Es cambio estructural (página 11) → se decide en chat maestro (§14.7), no en Fase 8.
+- **Trade-off aceptado:** ~20px de campo visual. Costo mínimo frente al riesgo de misread ejecutivo.
+- **Alcance del formato compacto:** por ahora solo Movilidad Nacional. Si se valida bien, puede adoptarse como estándar para páginas futuras (documentar en §11 si se generaliza).
+
 ---
 
 ## 8. Arquitectura de páginas
@@ -719,7 +747,7 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 
 - 3 Clustered Bar Charts horizontales (no 6 visuales — ver §7.13).
 - Dimensión Dirección incorporada como serie interna del visual.
-- Top 5 por [Movilidades], descendente, filtro Top N nativo (ver §7.14).
+- Ranking completo con scroll vertical, descendente por [Movilidades], altura de barra fija (ver §7.14 revisado — retroactivo 2026-06, validado por stakeholder).
 - Títulos explícitos: "Top Países", "Top Tipos de Movilidad", "Top Instituciones".
 - Etiquetas al final de barra, 10pt.
 - Eje X desactivado. Gridlines desactivadas.
@@ -739,6 +767,7 @@ Layout sobre canvas 1080×600 (área útil descontando panel lateral de slicers 
 - **Pregunta:** ¿Qué peso tiene la modalidad virtual y cómo se comporta?
 - **Alcance (panel oculto):** `Modalidad = "Virtual"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
 - **Estructura:** clon estructural de §8.2. Mismas medidas, mismo layout. Solo cambia el filtro de alcance.
+- **Nota v1.6:** tops actualizados retroactivamente a ranking completo con scroll (§7.14 revisado).
 
 ### 8.4 Internacionales en La Sabana *(nueva)*
 
@@ -949,8 +978,9 @@ Implementación completada. Página reconstruida de cero — la versión legado 
 
 - **Audiencia:** directivos + DRI.
 - **Pregunta:** ¿Cuál es la movilidad estudiantil nacional (dentro de Colombia) y cómo se comporta? (§3.1 P8)
-- **Alcance (panel oculto):** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"` AND `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`.
-- **Cuadro de texto visible:** "Esta página analiza movilidad estudiantil temporal con destino/origen dentro de Colombia. Excluye estudiantes regulares matriculados y movilidad internacional."
+- **Alcance (panel oculto):** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"` AND `STR_TABLA_ORIGEN_CAL IN {FCT_MOVILIDAD_ESTUDIANTE, FCT_VISITANTE_EXTRANJERO}`. **Sin filtro de Modalidad** — la página incluye presencial y virtual. Al duplicar desde Balance, **remover del panel oculto el filtro `Modalidad = "Presencial"` heredado** (paso crítico de la duplicación, v1.6).
+- **Cuadro de texto visible (formato compacto, §7.31):** "Movilidad temporal dentro de Colombia · Incluye modalidad presencial y virtual · Excluye internacional y matriculados regulares"
+- **Subtítulo dinámico (v1.6):** reutiliza `Subtitulo Contexto General` sin cambios — verificado que la medida no evalúa País ni Modalidad con `ISFILTERED`, por lo que el filtro permanente de panel oculto no rompe el estado default (regla de §7.29 no aplica).
 
 **Estructura visual confirmada — clon de §8.2 con un swap (layout idéntico a Balance):**
 
@@ -974,8 +1004,8 @@ Implementación completada. Página reconstruida de cero — la versión legado 
 | 1 — KPIs | Personas | `[Personas]` | Tarjeta | Portable, cero cambios. |
 | 1 — KPIs | % Bajo Convenio | `[% Bajo Convenio]` | Tarjeta | Portable, cero cambios. |
 | 2 — Evolución | Evolución E/S | `[Movilidades]` por período | Línea con series E/S | Eje categórico `YYYY-N` (§11.4.4). Configuración idéntica a §8.2. |
-| 3 — Tops | **Top Programas Académicos** | `[Movilidades]` por Unidad Académica → Programa | Clustered Bar horizontal + drilldown | **SWAP**: reemplaza Top Países de Balance. Solo programas La Sabana. Descendente por [Movilidades]. Dirección como serie interna (§7.13); interacción Top N + jerarquía a validar en Fase 8. |
-| 3 — Tops | Top Tipos de Movilidad | `[Movilidades]` por tipo | Clustered Bar horizontal | Idéntico a Balance (§7.13, §7.14). |
+| 3 — Tops | **Top Programas Académicos** | `[Movilidades]` por Unidad Académica → Programa | Clustered Bar horizontal + drilldown | **SWAP**: reemplaza Top Países de Balance. Solo programas La Sabana. Descendente por [Movilidades]. Dirección como serie interna (§7.13). ~~Interacción Top N + jerarquía a validar~~ — obsoleta por §7.14 revisado (sin Top N no hay conflicto). Riesgo abierto: legibilidad de jerarquía + Legend con muchas unidades académicas — validar visualmente en implementación. |
+| 3 — Tops | Top Tipos de Movilidad | `[Movilidades]` por tipo | Clustered Bar horizontal | Idéntico a Balance (§7.13, §7.14 revisado — ranking completo con scroll). |
 | 3 — Tops | Top Instituciones | `[Movilidades]` por institución | Clustered Bar horizontal | Instituciones colombianas. Idéntico a Balance. |
 
 **Total: 7 visuales (3 KPIs + 4 gráficos).** Idéntico a Balance excepto el swap en Fila 3.
@@ -984,7 +1014,21 @@ Implementación completada. Página reconstruida de cero — la versión legado 
 
 **Restricción de calidad documentada:** `DIM_UBICACION_GEOGRAFICA_MOVILIDAD` no tiene departamento/ciudad con diligenciamiento confiable para movilidad nacional. Si se corrige en el futuro, se puede agregar un top geográfico subnacional sin romper la página.
 
-**Slicers:** panel lateral estándar (§11.5.1). Configuración final de filtros a validar durante implementación (Fase 8) para evitar redundancia con Balance y otras páginas — en particular el slicer País, que es tautológico en esta página.
+**Slicers (v1.6 — resuelto):** panel lateral estándar (§11.5.1) **sin el slicer País** (tautológico). Exclusión completa del grupo de sincronización del slicer País — sync y visible desmarcados (§7.30). Resto del panel intacto, orden estándar.
+
+**Justificación 5-puntos del filtro de alcance (v1.6):**
+
+```
+Decisión: DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia" en panel oculto
+Tipo de filtro: alcance
+Capa elegida: panel de página
+Por qué acá y no en otra capa: [Movilidades] y [Personas] no cambian definición,
+  cambia el universo. Crear [Movilidades Nacionales] sería anti-patrón §9 #1.
+Trade-off aceptado: filtro invisible al usuario. Mitigación: cuadro de texto
+  compacto (§7.31).
+Test de portabilidad: una futura página mixta nacional+internacional se construye
+  sin este filtro, cero cambios en medidas. Aprobado.
+```
 
 **Nota sobre solapamiento con Balance (§7.24, §10.3):** Balance Presencial y Virtual no filtran por país — incluyen eventos nacionales. Esta página sí filtra explícitamente a Colombia. No se modifica el alcance de páginas cerradas.
 
@@ -1088,12 +1132,13 @@ Implementación completada. Página reconstruida de cero — la versión legado 
 
 - **Drill-through entre páginas:** se decide en Fase 1, una vez establecida la página Balance. **Diferido a Fase 3** — drill-through hacia Detalle Movilidad se construye cuando Detalle esté rediseñado, para evitar dependencia frágil sobre página que va a cambiar.
 - **Sincronización de slicers entre páginas:** se decide en Fase 0, junto con la convención de slicers.
-- **Tooltip pages ranking completo (tops Fase 1):** diferido a post-reunión stakeholder. Validar si Top 5 satisface requerimiento o si se necesita profundidad adicional. Si se requiere → construir 3 tooltip pages ocultas (países, tipos, instituciones) antes de cierre de Fase 5.
+- ~~**Tooltip pages ranking completo (tops Fase 1):**~~ **Cerrado (v1.6).** Obsoleto por §7.14 revisado: el stakeholder validó ranking completo con scroll vertical en los propios visuales. No se construyen tooltip pages.
 - **Menú Home — entrada Export SNIES:** pendiente. Se conecta cuando se desarrolle la página Home. Debe apuntar a Export SNIES Saliente como aterrizaje por defecto.
 - ~~**(v1.4) Exclusión de eventos nacionales en Balance Presencial/Virtual:**~~ **Cerrada (v1.4).** Balance no se toca. Las páginas Balance Presencial y Virtual siguen mostrando eventos nacionales e internacionales mezclados. Razón: reabrir fases cerradas modifica números ya validados por la DRI. El volumen nacional es presumiblemente bajo. Si en el futuro distorsiona tops internacionales, se agrega filtro `País ≠ Colombia` al panel oculto con cambio mínimo.
 - ~~**(v1.4) Medida `Promedio Duración Días`:**~~ **Cerrada (v1.5).** Creada en `_Medidas/Base/` como `AVERAGE(NUM_DURACION_DIAS_CAL_AJT)`, documentada según §5.2. Formato: entero, 0 decimales.
 - **(v1.4) Menú Home — entradas Caracterización, Movilidad Nacional y Financiación:** agregar cuando se desarrolle Home.
-- **(v1.4) Configuración de slicers en Movilidad Nacional:** validar durante Fase 8 qué filtros se mantienen y cuáles se ajustan para evitar redundancia (en particular el slicer País, tautológico en esa página).
+- ~~**(v1.4) Configuración de slicers en Movilidad Nacional:**~~ **Cerrada (v1.6).** Slicer País removido del lienzo y excluido del grupo de sincronización (sync + visible desmarcados). Resto del panel estándar intacto. Ver §7.30.
+- **(v1.6) Página "Definiciones y Metodología":** propuesta como **complemento** de los cuadros de alcance en página (no reemplazo — §7.31). Contenido candidato: glosario para usuario final, semántica Movilidades vs Personas, metodología de rangos de edad, alcances por página. Cambio estructural (página 11) — decidir en chat maestro (§14.7).
 - **(v1.4) Configuración de slicers en Financiación:** validar durante Fase 6.
 - **(v1.5) FK huérfana en DIM_PERSONA:** al menos 1 persona en la FCT no tiene registro en DIM_PERSONA. Impacto actual mínimo (capturado en DAX como BLANK en _Personas Sin Dato). Si el volumen crece, investigar en el ETL.
 
@@ -1269,7 +1314,7 @@ Esta tabla es la referencia normativa para páginas del bloque ANÁLISIS. Las p�
 | Programa Académico | Dropdown | Alfabético ascendente | Sin pre-selección |
 | País | Dropdown | Alfabético ascendente | Sin pre-selección |
 
-**Regla operativa:** cada página analítica nueva se construye copiando el panel de slicers de Resumen tal cual. Si una página necesita un slicer adicional, se agrega al final sin reordenar los existentes (ej. Modalidad en Caracterización, §8.8).
+**Regla operativa:** cada página analítica nueva se construye copiando el panel de slicers de Resumen tal cual. Si una página necesita un slicer adicional, se agrega al final sin reordenar los existentes (ej. Modalidad en Caracterización, §8.8). **Excepción inversa (v1.6):** si un slicer es tautológico con el alcance de panel oculto de la página, se remueve y se excluye de la sincronización (ej. País en Movilidad Nacional, §7.30).
 
 **Sincronización:** activa entre páginas analíticas. Desactivada con Detalle y SNIES (§11.5.3).
 
@@ -1395,12 +1440,12 @@ Entregables completados:
 - 3 KPIs (Movilidades, Personas, % Bajo Convenio) sin medidas nuevas — reutilización completa de medidas portables de Fase 0.
 - Evolución temporal con 2 series E/S, etiquetas off, tooltip con [Personas], eje X categórico rotado 45°.
 - 3 tops con dimensión Dirección incorporada como serie interna del visual (desvío justificado de §7.6, ver §7.13).
-- Top 5 con filtro nativo de Power BI, sin categoría "Otros" (ver §7.14).
+- Top 5 con filtro nativo de Power BI, sin categoría "Otros" (ver §7.14). *(v1.6: reemplazado retroactivamente por ranking completo con scroll — §7.14 revisado.)*
 - Slicers en panel lateral estándar, no en lienzo horizontal (ver §7.15).
 - Cuadro de texto de alcance visible bajo subtítulo dinámico.
 - Cero medidas nuevas — medidas base de Fase 0 cubren toda la página.
 - Drill-through diferido a Fase 3.
-- Tooltip pages con ranking completo diferidas a validación post-stakeholder (§10.3).
+- Tooltip pages con ranking completo diferidas a validación post-stakeholder (§10.3). *(v1.6: diferido cerrado como obsoleto — §7.14 revisado.)*
 - Las 5 preguntas DRI #1–#5 son respondibles desde la página.
 
 **Dependencias:** Fase 0.
@@ -1487,7 +1532,7 @@ Entregables completados:
 
 - Página "Movilidad Virtual" implementada según §8.3 (clon estructural de §8.2).
 - Filtro de alcance en panel oculto: `Modalidad = "Virtual"` AND `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
-- Misma estructura visual que Balance Presencial: 3 KPIs + line chart E/S + 3 tops con Dirección como serie interna.
+- Misma estructura visual que Balance Presencial: 3 KPIs + line chart E/S + 3 tops con Dirección como serie interna. *(v1.6: tops actualizados retroactivamente a ranking completo con scroll — §7.14 revisado.)*
 - Cuadro de texto de alcance visible.
 - Cero medidas nuevas — reutilización completa de medidas portables de Fase 0.
 - Sync slicers verificado con grupo Analíticas.
@@ -1554,10 +1599,21 @@ Entregables completados:
 
 1. ~~**Resolución de P7:**~~ Cerrado. Filtro confirmado: `DIM_UBICACION_GEOGRAFICA_MOVILIDAD[STR_PAIS_AJT] = "Colombia"`.
 2. **Página implementada según §8.9.** Clon de Balance con Top Programas Académicos en lugar de Top Países.
-3. **Filtros de alcance en panel oculto:** `STR_PAIS_AJT = "Colombia"` + `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
-4. **Cuadro de texto de alcance visible.**
-5. **Validación de configuración de slicers:** confirmar qué filtros se dejan para evitar redundancia (slicer País tautológico).
-6. **Validación de interacción Top N + jerarquía** en el visual Top Programas (drilldown).
+3. **Filtros de alcance en panel oculto:** `STR_PAIS_AJT = "Colombia"` + `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`. **Remover `Modalidad = "Presencial"` heredado de la duplicación.**
+4. **Cuadro de texto de alcance compacto** (§7.31).
+5. ~~**Validación de configuración de slicers.**~~ **Resuelta en diseño (v1.6):** slicer País removido + exclusión de sincronización (§7.30). En implementación: ejecutar y correr test de sync.
+6. ~~**Validación de interacción Top N + jerarquía.**~~ **Obsoleta (v1.6):** sin Top N por §7.14 revisado. Reemplazada por: verificar remoción del filtro Top N residual en los 3 lienzos con tops, y validar legibilidad del visual jerarquía UA→Programa + Dirección como Legend.
+
+**Checklist de implementación (v1.6):**
+
+- [ ] Duplicar página Balance Presencial.
+- [ ] Panel oculto: remover `Modalidad = "Presencial"`, agregar `STR_PAIS_AJT = "Colombia"`, conservar `STR_TABLA_ORIGEN_CAL IN {Movilidad, Visitantes}`.
+- [ ] Swap Fila 3: Top Países → Clustered Bar con jerarquía UA→Programa (`[Movilidades]`, Dirección como Legend, descendente, scroll, altura de barra fija).
+- [ ] Remover slicer País del lienzo + desmarcar sync y visible en panel Sync Slicers (§7.30).
+- [ ] Test de sync: `País = "España"` en Balance → Nacional muestra valores idénticos a sin filtro.
+- [ ] Verificar ausencia de filtro Top N residual en los 3 tops (también en Balance y Virtual).
+- [ ] Cuadro de texto compacto bajo subtítulo (texto en §8.9).
+- [ ] Verificar subtítulo `Subtitulo Contexto General` muestra estado default sin filtros de usuario.
 
 **Definition of Done específico:**
 
@@ -1565,8 +1621,10 @@ Entregables completados:
 - Cero medidas nuevas (reutilización total de medidas portables).
 - Estructura idéntica a Balance excepto swap Top Países → Top Programas.
 - ~~P7 cerrado.~~ Cerrado.
-- Cuadro de texto de alcance presente.
-- Configuración de slicers validada (sin redundancia).
+- Cuadro de texto de alcance presente (formato compacto §7.31).
+- Configuración de slicers ejecutada y test de sincronización aprobado (§7.30).
+- Filtro Top N residual ausente en los 3 lienzos con tops (§7.14 revisado).
+- Legibilidad del visual Top Programas (jerarquía + Legend) validada visualmente.
 
 **Dependencias:** Fase 0 (medidas base). ~~P7~~ cerrado — **Fase 8 desbloqueada.**
 
@@ -1776,6 +1834,7 @@ El `.md` también evoluciona. Convención:
   - v1.3 — Fase 2 cerrada, §7.8 revisado, §8.6/§8.7 nuevos, §11.5.2 nuevo
   - v1.4 — Ajuste pre-Fase 5: hallazgos 1–7 integrados (§3.1 P7/P8, §4.1.1/§4.3/§4.6 campos demográficos, §7.19–§7.25, §8.8/§8.9, Fases 7–8). **Cierre 2026-06-10:** P1, P4–P7 y R1 cerrados; §4.7 campos financieros; §7.20 precisado (excepción etaria §7.22); §7.26 y §8.10 nuevos (Financiación — Exploratoria); §9 #9 nuevo; conteo final 10 páginas; Fases 3–8 todas desbloqueadas.
   - v1.5 — Fase 7 cerrada. §4.3/§4.6 actualizados (columnas PQ implementadas, conteo Sin dato corregido). §7.27–§7.29 nuevos (naming desvío, pictograma SVG, subtítulo por página). §8.8 con detalle de implementación final. §10.3 actualizado (Promedio Duración cerrado, nuevos diferidos). 11 medidas creadas.
+  - v1.6 — Diseño Fase 8 cerrado (2026-06-12). §7.14 revisado (ranking completo con scroll, validado stakeholder, retroactivo a Balance/Virtual). §7.30 nuevo (exclusión slicer País + sync en Nacional). §7.31 nuevo (cuadro de alcance compacto; página Definiciones rechazada como reemplazo, propuesta como complemento diferido §10.3). §8.9 actualizado (alcance sin Modalidad, subtítulo compartido verificado, justificación 5-puntos del filtro Colombia). §10.3: tooltip pages y config slicers Nacional cerrados; diferido Definiciones agregado. §11.5.1 excepción inversa. Implementación Fase 8 pendiente contra checklist §12.
 
 ### 14.10 Orden recomendado de ejecución de las fases
 
